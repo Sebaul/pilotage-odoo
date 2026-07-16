@@ -1,0 +1,3400 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pilotage Odoo — Cogitime</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  --bg: #12161F;
+  --surface: #1B2130;
+  --surface-raised: #242B3D;
+  --border: #313A4F;
+  --text-primary: #EDEFF4;
+  --text-secondary: #8D93A6;
+  --accent-teal: #45B8AC;
+  --accent-amber: #E3A548;
+  --accent-coral: #E2725B;
+  --accent-lavender: #8C8FA3;
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;}
+#app{
+  font-family:'Inter',sans-serif;
+  background:var(--bg);
+  color:var(--text-primary);
+  min-height:600px;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+
+h1,h2,h3,.display{
+  font-family:'Space Grotesk',sans-serif;
+}
+
+.mono{
+  font-family:'IBM Plex Mono',monospace;
+}
+
+/* --- KPI bar --- */
+.kpi-bar{
+  display:flex;
+  gap:1px;
+  background:var(--border);
+  border-bottom:1px solid var(--border);
+}
+.kpi{
+  flex:1;
+  background:var(--surface);
+  padding:16px 20px;
+}
+.kpi-label{
+  font-size:11px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
+  margin-bottom:6px;
+}
+.kpi-value{
+  font-size:28px;
+  font-weight:600;
+  font-family:'Space Grotesk',sans-serif;
+}
+.kpi-value.teal{color:var(--accent-teal);}
+
+.kpi-nav-btn{
+  border:none;
+  cursor:pointer;
+  text-align:left;
+  font-family:'Inter',sans-serif;
+  display:flex;
+  align-items:center;
+  font-size:14px;
+  font-weight:600;
+  color:var(--text-primary);
+  transition:background 0.15s;
+}
+.kpi-nav-btn:hover{background:var(--surface-raised);}
+.kpi-nav-btn.active{
+  background:#1E2A2C;
+  color:var(--accent-teal);
+}
+.kpi-value.amber{color:var(--accent-amber);}
+.kpi-value.coral{color:var(--accent-coral);}
+
+/* --- Layout --- */
+.main-layout{
+  display:flex;
+  flex:1;
+  min-height:520px;
+}
+
+.sidebar{
+  width:280px;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  padding:16px;
+  overflow-y:auto;
+}
+.sidebar-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
+}
+.sidebar-title{
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  color:var(--text-secondary);
+}
+
+.project-card{
+  background:var(--surface-raised);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:12px;
+  margin-bottom:8px;
+  cursor:pointer;
+  transition:border-color 0.15s;
+}
+.project-card:hover{
+  border-color:var(--accent-lavender);
+}
+.project-card.selected{
+  border-color:var(--accent-teal);
+  background:#1E2A2C;
+}
+.project-card-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:6px;
+}
+.project-client{
+  font-weight:600;
+  font-size:14px;
+}
+.project-ref{
+  font-size:10px;
+  color:var(--text-secondary);
+}
+.health-dot{
+  width:8px;height:8px;border-radius:50%;
+  flex-shrink:0;
+  margin-top:4px;
+}
+.health-dot.ok{background:var(--accent-teal);}
+.health-dot.attention{background:var(--accent-amber);}
+.health-dot.bloque{background:var(--accent-coral);}
+
+.mini-pipeline{
+  display:flex;
+  gap:2px;
+  margin-top:8px;
+}
+.mini-seg{
+  height:4px;
+  flex:1;
+  border-radius:2px;
+  background:var(--border);
+}
+.mini-seg.done{background:var(--accent-lavender);}
+.mini-seg.current.ok{background:var(--accent-teal);}
+.mini-seg.current.attention{background:var(--accent-amber);}
+.mini-seg.current.bloque{background:var(--accent-coral);}
+
+.btn{
+  font-family:'Inter',sans-serif;
+  font-size:13px;
+  font-weight:500;
+  padding:8px 14px;
+  border-radius:5px;
+  border:1px solid var(--border);
+  background:var(--surface-raised);
+  color:var(--text-primary);
+  cursor:pointer;
+  transition:all 0.15s;
+}
+.btn:hover{border-color:var(--accent-lavender);}
+.btn-primary{
+  background:var(--accent-teal);
+  color:#0A1A18;
+  border:none;
+  font-weight:600;
+}
+.btn-primary:hover{opacity:0.9;}
+.btn-full{width:100%;}
+.btn-small{
+  padding:4px 10px;
+  font-size:12px;
+}
+.btn-ghost{
+  background:transparent;
+  border:1px solid var(--border);
+}
+
+/* --- Main panel --- */
+.main-panel{
+  flex:1;
+  padding:24px 28px;
+  overflow-y:auto;
+}
+.empty-state{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  height:100%;
+  color:var(--text-secondary);
+  gap:8px;
+}
+
+.panel-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:16px;
+}
+.panel-title{
+  font-size:22px;
+  font-weight:600;
+}
+.panel-sub{
+  color:var(--text-secondary);
+  font-size:13px;
+  margin-top:4px;
+}
+.panel-actions{
+  display:flex;
+  gap:8px;
+}
+
+.section-label{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  color:var(--text-secondary);
+  margin:20px 0 10px;
+}
+
+.pipeline{
+  display:flex;
+  gap:4px;
+}
+.pipeline-seg{
+  flex:1;
+  padding:10px 6px;
+  text-align:center;
+  border-radius:5px;
+  background:var(--surface-raised);
+  border:1px solid var(--border);
+  font-size:11px;
+  color:var(--text-secondary);
+  cursor:pointer;
+}
+.pipeline-seg.done{
+  background:#26302A;
+  color:var(--accent-lavender);
+  border-color:var(--border);
+}
+.pipeline-seg.current{
+  border-width:2px;
+  font-weight:600;
+}
+.pipeline-seg.current.ok{border-color:var(--accent-teal);color:var(--accent-teal);background:#16211F;}
+.pipeline-seg.current.attention{border-color:var(--accent-amber);color:var(--accent-amber);background:#231F16;}
+.pipeline-seg.current.bloque{border-color:var(--accent-coral);color:var(--accent-coral);background:#241816;}
+
+.health-select{
+  display:flex;
+  gap:6px;
+  margin-top:12px;
+}
+.health-btn{
+  flex:1;
+  padding:8px;
+  border-radius:5px;
+  border:1px solid var(--border);
+  background:var(--surface-raised);
+  color:var(--text-secondary);
+  font-size:12px;
+  cursor:pointer;
+}
+.health-btn.active.ok{background:var(--accent-teal);color:#0A1A18;border:none;}
+.health-btn.active.attention{background:var(--accent-amber);color:#231A08;border:none;}
+.health-btn.active.bloque{background:var(--accent-coral);color:#240D07;border:none;}
+
+.info-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  margin-top:16px;
+}
+.info-block{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:14px;
+}
+.info-block-label{
+  font-size:11px;
+  color:var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  margin-bottom:8px;
+}
+.tag{
+  display:inline-block;
+  background:var(--surface-raised);
+  border:1px solid var(--border);
+  padding:3px 8px;
+  border-radius:4px;
+  font-size:12px;
+  margin:2px 4px 2px 0;
+}
+textarea, input[type=text], input[type=date], select{
+  width:100%;
+  background:var(--surface-raised);
+  border:1px solid var(--border);
+  color:var(--text-primary);
+  border-radius:5px;
+  padding:8px 10px;
+  font-family:'Inter',sans-serif;
+  font-size:13px;
+}
+textarea{resize:vertical;min-height:70px;}
+label{
+  font-size:12px;
+  color:var(--text-secondary);
+  display:block;
+  margin-bottom:4px;
+  margin-top:12px;
+}
+
+/* --- Tabs --- */
+.tabs{
+  display:flex;
+  gap:20px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:18px;
+}
+.tab{
+  padding:6px 0 10px;
+  font-size:13px;
+  color:var(--text-secondary);
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+}
+.tab.active{
+  color:var(--text-primary);
+  font-weight:600;
+  border-color:var(--accent-teal);
+}
+
+/* --- Finance --- */
+.fin-cards{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  margin-bottom:12px;
+}
+.fin-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:12px 14px;
+}
+.fin-card-label{
+  font-size:10px;
+  color:var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  margin-bottom:6px;
+}
+.fin-card-value{
+  font-size:19px;
+  font-weight:600;
+  font-family:'Space Grotesk',sans-serif;
+}
+.progress-outer{
+  background:var(--surface-raised);
+  border-radius:4px;
+  height:8px;
+  overflow:hidden;
+  margin-top:8px;
+}
+.progress-inner{
+  background:var(--accent-teal);
+  height:100%;
+}
+.month-select-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:10px;
+}
+.month-select-row select{width:auto;}
+table.data-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+  margin-top:8px;
+}
+table.data-table th{
+  text-align:right;
+  font-size:10px;
+  color:var(--text-secondary) !important;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  padding:6px 8px;
+  border-bottom:1px solid var(--border);
+  background:transparent;
+}
+table.data-table th:first-child, table.data-table td:first-child{text-align:left;}
+table.data-table td{
+  padding:6px 8px;
+  border-bottom:1px solid var(--border);
+  text-align:right;
+  font-size:13px;
+  color:var(--text-primary) !important;
+  background:transparent;
+}
+table.data-table tr{background:transparent;}
+table.data-table tfoot td{
+  font-weight:700;
+  border-top:1px solid var(--accent-lavender);
+  border-bottom:none;
+  color:var(--text-primary) !important;
+}
+.import-hint{
+  font-size:12px;
+  color:var(--text-secondary);
+  margin-top:6px;
+  line-height:1.5;
+}
+.freelancer-chip{
+  cursor:pointer;
+}
+
+/* --- Freelancers footer panel --- */
+.freelancers-bar{
+  border-top:1px solid var(--border);
+  background:var(--surface);
+  padding:14px 24px;
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  align-items:center;
+}
+.freelancer-chip{
+  background:var(--surface-raised);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:6px 12px;
+  font-size:12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.freelancer-load{
+  background:var(--accent-lavender);
+  color:#12161F;
+  border-radius:10px;
+  padding:1px 7px;
+  font-size:11px;
+  font-weight:600;
+}
+
+/* --- Modal --- */
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:100;
+}
+.modal{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:24px;
+  width:460px;
+  max-height:85vh;
+  overflow-y:auto;
+}
+.modal h3{margin-top:0;}
+.modal-actions{
+  display:flex;
+  gap:8px;
+  margin-top:20px;
+  justify-content:flex-end;
+}
+.close-x{
+  float:right;
+  cursor:pointer;
+  color:var(--text-secondary);
+  font-size:18px;
+}
+.summary-text{
+  white-space:pre-wrap;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;
+  line-height:1.6;
+  background:var(--surface-raised);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:14px;
+  max-height:340px;
+  overflow-y:auto;
+}
+.loading-dots::after{
+  content:'';
+  animation:dots 1.2s infinite;
+}
+@keyframes dots{
+  0%{content:'.'}
+  33%{content:'..'}
+  66%{content:'...'}
+}
+.field-row{display:flex;gap:10px;}
+.field-row > div{flex:1;}
+.freelancer-tjm-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.freelancer-tjm-row .fname{flex:1.4;font-size:13px;}
+.freelancer-tjm-row select{flex:1;}
+.freelancer-tjm-row input{flex:1;}
+html, body{
+  margin:0;
+  padding:0;
+  background:var(--bg);
+  min-height:100vh;
+}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const STAGES = ['Cadrage','Configuration','Développement','Tests','Recette','Go-live'];
+// --- Adaptateur de stockage local (remplace window.storage de Claude) ---
+// Cette page est hébergée en dehors de Claude : les données sont stockées
+// dans le navigateur (localStorage), donc propres à cet appareil/navigateur.
+// Utilisez les boutons Export/Import de l'outil pour transférer les données
+// entre appareils ou navigateurs.
+if(!window.storage){
+  window.storage = {
+    async get(key){
+      try{
+        const raw = localStorage.getItem(key);
+        if(raw === null || raw === undefined) return null;
+        return {key, value: raw, shared:false};
+      }catch(e){
+        console.error('storage.get error', e);
+        return null;
+      }
+    },
+    async set(key, value){
+      try{
+        localStorage.setItem(key, value);
+        return {key, value, shared:false};
+      }catch(e){
+        console.error('storage.set error', e);
+        return null;
+      }
+    },
+    async delete(key){
+      try{
+        localStorage.removeItem(key);
+        return {key, deleted:true, shared:false};
+      }catch(e){
+        console.error('storage.delete error', e);
+        return null;
+      }
+    },
+    async list(prefix){
+      try{
+        const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
+        return {keys, prefix, shared:false};
+      }catch(e){
+        console.error('storage.list error', e);
+        return null;
+      }
+    }
+  };
+}
+
+const STORAGE_KEY = 'odoo-pilotage-data';
+const HISTORY_STORAGE_KEY = 'odoo-pilotage-import-history';
+const TODAY = '2026-07-10';
+const CURRENT_MONTH = '2026-07';
+
+let state = {
+  projects: [],
+  freelancers: [],
+  knownOdooProjectNames: [],
+  allImportedRows: [],
+  selectedId: null,
+  loaded: false,
+  activeTab: 'finance',
+  financeMonth: null,
+  financeViewMode: 'periode',
+  periodMode: 'mois',
+  periodFrom: null,
+  periodTo: null,
+  viewMode: 'project',
+  sidebarSearch: '',
+  sidebarVisibleCount: 15,
+  globalFinanceMonth: null,
+  globalSubTab: 'monthly',
+  globalMonthlyFilter: 'all',
+  marginShowDetails: false,
+  linesFilterMonth: 'all',
+  linesFilterProject: 'all',
+  linesFilterFreelancer: 'all',
+  linesGroupBy: 'none'
+};
+
+let modal = null; // {type: 'project'|'freelancer'|'summary'|'import'|'importResult', data:{...}}
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+function seedData(){
+  return {
+    projects: [],
+    freelancers: []
+  };
+}
+
+async function loadData(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      state.projects = parsed.projects || [];
+      state.freelancers = parsed.freelancers || [];
+      state.knownOdooProjectNames = parsed.knownOdooProjectNames || [];
+      migrateLoadedData();
+      const derivedNames = new Set(state.knownOdooProjectNames || []);
+      state.projects.forEach(p=>{
+        (p.odooProjectName||'').split(/[,;]/).map(s=>s.trim()).filter(Boolean).forEach(f=> derivedNames.add(f));
+      });
+      state.knownOdooProjectNames = Array.from(derivedNames).sort();
+    } else {
+      const seed = seedData();
+      state.projects = seed.projects;
+      state.freelancers = seed.freelancers;
+      await saveData();
+    }
+  }catch(e){
+    const seed = seedData();
+    state.projects = seed.projects;
+    state.freelancers = seed.freelancers;
+    try{ await saveData(); }catch(e2){ console.error('Save failed', e2); }
+  }
+  state.loaded = true;
+  if(state.projects.length) state.selectedId = state.projects[0].id;
+
+  try{
+    const histRes = await window.storage.get(HISTORY_STORAGE_KEY, false);
+    state.allImportedRows = (histRes && histRes.value) ? JSON.parse(histRes.value) : [];
+  }catch(e){
+    state.allImportedRows = [];
+  }
+
+  render();
+}
+
+async function saveData(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify({
+      projects: state.projects,
+      freelancers: state.freelancers,
+      knownOdooProjectNames: state.knownOdooProjectNames
+    }), false);
+  }catch(e){
+    console.error('Erreur de sauvegarde', e);
+  }
+}
+
+function rowIdentityKey(row){
+  const rawId = (row['ID']||'').toString().trim();
+  return rawId || buildFallbackSourceId(row);
+}
+
+function mergeImportedRows(rows){
+  const map = new Map();
+  (state.allImportedRows||[]).forEach(r=> map.set(rowIdentityKey(r), r));
+  rows.forEach(r=> map.set(rowIdentityKey(r), r));
+  state.allImportedRows = Array.from(map.values());
+}
+
+async function saveImportHistory(){
+  try{
+    await window.storage.set(HISTORY_STORAGE_KEY, JSON.stringify(state.allImportedRows), false);
+  }catch(e){
+    console.error('Erreur de sauvegarde de l\u2019historique d\u2019import', e);
+  }
+}
+
+function computeSuggestedTjm(salaireMensuel, heuresPresenceSemaine){
+  if(!salaireMensuel || !heuresPresenceSemaine) return null;
+  const joursParSemaine = heuresPresenceSemaine/7;
+  const joursParMois = joursParSemaine * (52/12);
+  if(!joursParMois) return null;
+  return salaireMensuel/joursParMois;
+}
+
+function formatEUR(n){
+  return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2}).format(n || 0);
+}
+
+function healthLabel(h){
+  return {ok:'Sur les rails', attention:'À surveiller', bloque:'Bloqué'}[h];
+}
+
+function daysUntil(dateStr){
+  const d = new Date(dateStr);
+  const now = new Date(TODAY);
+  return Math.round((d-now)/(1000*60*60*24));
+}
+
+function render(){
+  const app = document.getElementById('app');
+  if(!state.loaded){
+    app.innerHTML = '<div class="empty-state" style="height:400px;">Chargement…</div>';
+    return;
+  }
+
+  const kpiTotal = state.projects.length;
+  const kpiBloque = state.projects.filter(p=>p.health==='bloque').length;
+  const kpiAttention = state.projects.filter(p=>p.health==='attention').length;
+  const kpiUrgent = state.projects.filter(p=>daysUntil(p.deadline) <= 7).length;
+
+  app.innerHTML = `
+    <div class="kpi-bar">
+      <button class="kpi kpi-nav-btn ${state.viewMode==='globalFinance'?'active':''}" id="nav-global-finance">📊 Rentabilité globale</button>
+      <div class="kpi"><div class="kpi-label">Projets actifs</div><div class="kpi-value">${kpiTotal}</div></div>
+      <div class="kpi"><div class="kpi-label">Bloqués</div><div class="kpi-value coral">${kpiBloque}</div></div>
+      <div class="kpi"><div class="kpi-label">À surveiller</div><div class="kpi-value amber">${kpiAttention}</div></div>
+      <div class="kpi"><div class="kpi-label">Échéance &lt; 7j</div><div class="kpi-value teal">${kpiUrgent}</div></div>
+    </div>
+    <div class="main-layout">
+      ${renderSidebar()}
+      ${state.viewMode==='globalFinance' ? renderGlobalFinanceView() : renderMainPanel()}
+    </div>
+    ${renderFreelancersBar()}
+  `;
+
+  attachSidebarEvents();
+  if(state.viewMode==='globalFinance'){
+    attachGlobalFinanceEvents();
+  } else {
+    attachMainPanelEvents();
+  }
+  attachFreelancerEvents();
+
+  if(modal) renderModal();
+}
+
+const BILLING_TYPE_META = {
+  regie: {icon:'⚙️', color:'#8C8FA3'},
+  budgetAnnuel: {icon:'📅', color:'#E3A548'},
+  forfaitProjet: {icon:'📦', color:'#45B8AC'},
+  maintenance: {icon:'🔧', color:'#E2725B'}
+};
+
+function migrateLoadedData(){
+  state.projects.forEach(p=>{
+    if(!p.timeEntries) p.timeEntries = [];
+    if(p.tjmVendu===undefined) p.tjmVendu = 0;
+    if(p.vendu===undefined) p.vendu = 0;
+    if(p.pctProdRisque===undefined) p.pctProdRisque = 0;
+    if(p.factureCumulee===undefined) p.factureCumulee = 0;
+    if(p.avancementFeeling===undefined) p.avancementFeeling = 0;
+    if(p.odooProjectName===undefined) p.odooProjectName = '';
+    if(p.driveLink===undefined) p.driveLink = '';
+    if(p.useCoef===undefined) p.useCoef = false;
+    if(p.coefficients===undefined) p.coefficients = {};
+    if(p.billingType===undefined) p.billingType = 'forfaitProjet';
+    if(p.inheritFrom===undefined) p.inheritFrom = '';
+    if(p.forfaits===undefined) p.forfaits = {};
+    if(p.budgetAnnuelJours===undefined) p.budgetAnnuelJours = 0;
+    if(p.odooTaskKeyword===undefined) p.odooTaskKeyword = '';
+  });
+  state.freelancers.forEach(f=>{
+    if(f.tjmCout===undefined) f.tjmCout = 0;
+    if(f.type===undefined) f.type = 'externe';
+    if(f.salaireMensuel===undefined) f.salaireMensuel = 0;
+    if(f.heuresPresenceSemaine===undefined) f.heuresPresenceSemaine = 0;
+  });
+}
+
+function exportAllData(){
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    projects: state.projects,
+    freelancers: state.freelancers,
+    knownOdooProjectNames: state.knownOdooProjectNames,
+    allImportedRows: state.allImportedRows
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pilotage-odoo-sauvegarde-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function importAllDataFromFile(file){
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if(!Array.isArray(payload.projects) || !Array.isArray(payload.freelancers)){
+      showAlert('Ce fichier ne semble pas être une sauvegarde valide de cet outil.');
+      return;
+    }
+    state.projects = payload.projects;
+    state.freelancers = payload.freelancers;
+    state.knownOdooProjectNames = payload.knownOdooProjectNames || [];
+    state.allImportedRows = payload.allImportedRows || [];
+    migrateLoadedData();
+    await saveData();
+    await saveImportHistory();
+    state.selectedId = state.projects.length ? state.projects[0].id : null;
+    state.viewMode = 'project';
+    render();
+    showAlert(`Sauvegarde importée : ${state.projects.length} projet(s), ${state.freelancers.length} collaborateur(s).`);
+  }catch(e){
+    console.error(e);
+    showAlert('Erreur lors de la lecture du fichier : ' + e.message);
+  }
+}
+
+function renderSidebar(){
+  const sortedProjects = [...state.projects].sort((a,b)=>{
+    return computeFinance(b).totalHeures - computeFinance(a).totalHeures;
+  });
+
+  const searchTerm = (state.sidebarSearch||'').trim().toLowerCase();
+  const filteredProjects = searchTerm ? sortedProjects.filter(p=>
+    p.client.toLowerCase().includes(searchTerm) ||
+    (p.ref||'').toLowerCase().includes(searchTerm) ||
+    (p.odooProjectName||'').toLowerCase().includes(searchTerm)
+  ) : sortedProjects;
+
+  const visibleProjects = filteredProjects.slice(0, state.sidebarVisibleCount);
+
+  const cards = visibleProjects.map(p=>{
+    const fin = computeFinance(p);
+    const meta = BILLING_TYPE_META[p.billingType] || BILLING_TYPE_META.forfaitProjet;
+    const segs = STAGES.map((s,i)=>{
+      let cls = 'mini-seg';
+      if(i < p.stage) cls += ' done';
+      else if(i === p.stage) cls += ` current ${p.health}`;
+      return `<div class="${cls}"></div>`;
+    }).join('');
+    return `
+      <div class="project-card ${(p.id===state.selectedId && state.viewMode==='project')?'selected':''}" data-id="${p.id}" style="border-left:3px solid ${meta.color};">
+        <div class="project-card-top">
+          <div>
+            <div class="project-client">${meta.icon} ${p.client}</div>
+            <div class="project-ref mono">${p.ref}</div>
+          </div>
+          <div class="health-dot ${p.health}"></div>
+        </div>
+        <div class="mini-pipeline">${segs}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;" class="mono">${heuresToHHMM(fin.totalHeures)} · ${fin.totalHeures.toFixed(1)}h consommées${fin.joursVendus ? ` · ${fin.avancementTps.toFixed(0)}%` : ''}</div>
+      </div>`;
+  }).join('');
+
+  const countLabel = `${visibleProjects.length}/${filteredProjects.length} projet${filteredProjects.length>1?'s':''}`;
+  const showMoreBtn = filteredProjects.length > visibleProjects.length
+    ? `<button class="btn btn-small btn-full" id="btn-show-more-projects">Voir plus (+15)</button>` : '';
+
+  return `
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Projets</div>
+        <button class="btn btn-small" id="btn-import-global">Importer Odoo</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button class="btn btn-small btn-ghost" id="btn-export-backup" style="flex:1;">⬇️ Exporter</button>
+        <button class="btn btn-small btn-ghost" id="btn-import-backup" style="flex:1;">⬆️ Importer sauvegarde</button>
+        <input type="file" id="f-import-backup-file" accept=".json" style="display:none;">
+      </div>
+      <input type="text" id="f-sidebar-search" value="${state.sidebarSearch||''}" placeholder="Rechercher un projet…" style="margin-bottom:10px;">
+      ${cards || '<div style="color:var(--text-secondary);font-size:13px;">Aucun projet</div>'}
+      <div style="font-size:11px;color:var(--text-secondary);margin:8px 0;text-align:center;" class="mono">${countLabel}</div>
+      ${showMoreBtn}
+      <button class="btn btn-full" id="btn-add-project" style="margin-top:10px;">+ Nouveau projet</button>
+    </div>
+  `;
+}
+
+function monthsFromEntries(p){
+  const set = new Set((p.timeEntries||[]).map(e=>e.month));
+  set.add(CURRENT_MONTH);
+  return Array.from(set).sort();
+}
+
+function computeFinance(p){
+  const tjmVendu = getEffectiveTjmVendu(p);
+  const vendu = p.vendu || 0;
+  const joursVendus = tjmVendu ? vendu/tjmVendu : 0;
+  const pctProdRisque = p.pctProdRisque || 0;
+  const nbJourProd = joursVendus * (pctProdRisque/100);
+
+  const entries = p.timeEntries || [];
+  const totalHeures = entries.reduce((s,e)=>s+e.heures,0);
+  const totalJours = totalHeures/7;
+  const restantJours = joursVendus - totalJours;
+  const avancementTps = joursVendus ? (totalJours/joursVendus*100) : 0;
+
+  const monthsWithData = Array.from(new Set(entries.map(e=>e.month)));
+  const monthsSorted = monthsWithData.slice().sort();
+  const premierMois = monthsSorted[0] || null;
+  const dernierMois = monthsSorted[monthsSorted.length-1] || null;
+
+  const entriesWithDate = entries.filter(e=>e.date);
+  const datesSorted = entriesWithDate.map(e=>e.date).sort();
+  const premierJour = datesSorted[0] || null;
+  const dernierJour = datesSorted[datesSorted.length-1] || null;
+  const nbSansDate = entries.length - entriesWithDate.length;
+  const nbMoisAvecSaisie = monthsWithData.length || 1;
+  const nbJourMoyParMois = totalJours / nbMoisAvecSaisie;
+  const nbMoisRestant = nbJourMoyParMois > 0 ? restantJours/nbJourMoyParMois : null;
+
+  const isMaintenance = p.billingType === 'maintenance';
+  let facturationCumulee = 0, ssTraitanceCumulee = 0;
+  entries.forEach(e=>{
+    const jours = e.heures/7;
+    const fl = state.freelancers.find(f=>f.name===e.freelancer);
+    const cout = (fl && fl.type!=='interne') ? (fl.tjmCout||0) : 0;
+    ssTraitanceCumulee += jours*cout;
+    if(!isMaintenance){
+      const coef = getEffectiveCoefficient(p, e.freelancer, e.month);
+      facturationCumulee += jours*coef*tjmVendu;
+    }
+  });
+  if(isMaintenance && monthsWithData.length){
+    const sorted = monthsWithData.slice().sort();
+    facturationCumulee = monthsBetween(sorted[0], sorted[sorted.length-1]).reduce((s,m)=> s + getForfaitMensuel(p, m), 0);
+  }
+  const margeCumulee = facturationCumulee - ssTraitanceCumulee;
+
+  const currentYear = CURRENT_MONTH.slice(0,4);
+  const joursAnnee = entries.filter(e=>e.month.slice(0,4)===currentYear).reduce((s,e)=>s+e.heures,0)/7;
+  const budgetAnnuelJours = p.budgetAnnuelJours || 0;
+  const restantAnnee = budgetAnnuelJours - joursAnnee;
+
+  return {tjmVendu, vendu, joursVendus, pctProdRisque, nbJourProd,
+    totalHeures, totalJours, restantJours, avancementTps,
+    nbMoisRestant, nbJourMoyParMois,
+    facturationCumulee, ssTraitanceCumulee, margeCumulee,
+    joursAnnee, budgetAnnuelJours, restantAnnee,
+    premierMois, dernierMois, premierJour, dernierJour, nbSansDate};
+}
+
+function getReferenceProject(p){
+  if(!p.inheritFrom) return null;
+  return state.projects.find(pr=>pr.id===p.inheritFrom) || null;
+}
+
+function getEffectiveTjmVendu(p){
+  const ref = getReferenceProject(p);
+  return ref ? (ref.tjmVendu||0) : (p.tjmVendu||0);
+}
+
+function getEffectiveCoefficient(p, freelancerName, month){
+  const ref = getReferenceProject(p);
+  return getCoefficient(ref || p, freelancerName, month);
+}
+
+function getForfaitMensuel(project, month){
+  const co = project.forfaits || {};
+  const applicableMonths = Object.keys(co).filter(m => m <= month).sort();
+  if(!applicableMonths.length) return 0;
+  const val = co[applicableMonths[applicableMonths.length-1]];
+  return (typeof val === 'number' && val >= 0) ? val : 0;
+}
+
+function setForfaitMensuel(project, month, value){
+  if(!project.forfaits) project.forfaits = {};
+  project.forfaits[month] = value;
+}
+
+function monthsBetween(fromMonth, toMonth){
+  const months = [];
+  let cur = fromMonth;
+  let guard = 0;
+  while(cur <= toMonth && guard < 240){
+    months.push(cur);
+    cur = shiftMonth(cur, 1);
+    guard++;
+  }
+  return months;
+}
+
+function getCoefficient(project, freelancerName, month){
+  const co = (project.coefficients && project.coefficients[freelancerName]) || {};
+  const applicableMonths = Object.keys(co).filter(m => m <= month).sort();
+  if(!applicableMonths.length) return 1;
+  const val = co[applicableMonths[applicableMonths.length-1]];
+  return (typeof val === 'number' && val > 0) ? val : 1;
+}
+
+function setCoefficient(project, freelancerName, month, value){
+  if(!project.coefficients) project.coefficients = {};
+  if(!project.coefficients[freelancerName]) project.coefficients[freelancerName] = {};
+  project.coefficients[freelancerName][month] = value;
+}
+
+function computeRangeBreakdown(p, fromMonth, toMonth){
+  const entries = (p.timeEntries||[]).filter(e=> e.month >= fromMonth && e.month <= toMonth);
+  const byFreelancer = {};
+  entries.forEach(e=>{
+    if(!byFreelancer[e.freelancer]) byFreelancer[e.freelancer] = {heures:0, joursFacturables:0};
+    const coef = getEffectiveCoefficient(p, e.freelancer, e.month);
+    byFreelancer[e.freelancer].heures += e.heures;
+    byFreelancer[e.freelancer].joursFacturables += (e.heures/7) * coef;
+  });
+  const tjmVendu = getEffectiveTjmVendu(p);
+  const isMaintenance = p.billingType === 'maintenance';
+  const rows = Object.keys(byFreelancer).map(name=>{
+    const heures = byFreelancer[name].heures;
+    const jours = heures/7;
+    const joursFacturables = byFreelancer[name].joursFacturables;
+    const coefMoyen = jours ? Math.round((joursFacturables/jours)*10000)/10000 : 1;
+    const fl = state.freelancers.find(f=>f.name===name);
+    const facturation = isMaintenance ? null : joursFacturables*tjmVendu;
+    const cout = (fl && fl.type!=='interne') ? (fl.tjmCout||0) : 0;
+    const ssTraitance = jours*cout;
+    const marge = isMaintenance ? null : (facturation - ssTraitance);
+    const margePct = (!isMaintenance && facturation) ? (marge/facturation*100) : 0;
+    return {name, heures, jours, joursFacturables, coefMoyen, facturation, ssTraitance, marge, margePct};
+  });
+  const totals = rows.reduce((acc,r)=>{
+    acc.heures+=r.heures; acc.jours+=r.jours; acc.joursFacturables+=r.joursFacturables;
+    acc.ssTraitance+=r.ssTraitance;
+    if(!isMaintenance){ acc.facturation+=r.facturation; acc.marge+=r.marge; }
+    return acc;
+  }, {heures:0,jours:0,joursFacturables:0,facturation:0,ssTraitance:0,marge:0});
+
+  if(isMaintenance){
+    totals.facturation = monthsBetween(fromMonth, toMonth).reduce((s,m)=> s + getForfaitMensuel(p, m), 0);
+    totals.marge = totals.facturation - totals.ssTraitance;
+  }
+  totals.margePct = totals.facturation ? (totals.marge/totals.facturation*100) : 0;
+  return {rows, totals};
+}
+
+function shiftMonth(monthStr, delta){
+  const [y,m] = monthStr.split('-').map(Number);
+  const d = new Date(y, (m-1)+delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function pickDefaultMonth(p){
+  const months = new Set((p.timeEntries||[]).map(e=>e.month));
+  if(months.has(CURRENT_MONTH)) return CURRENT_MONTH;
+  const prevMonth = shiftMonth(CURRENT_MONTH, -1);
+  if(months.has(prevMonth)) return prevMonth;
+  return null;
+}
+
+function renderMainPanel(){
+  const p = state.projects.find(pr=>pr.id===state.selectedId);
+  if(!p){
+    return `<div class="main-panel"><div class="empty-state">Sélectionnez un projet à gauche, ou créez-en un nouveau.</div></div>`;
+  }
+
+  const dleft = daysUntil(p.deadline);
+  const dtext = dleft < 0 ? `dépassée de ${Math.abs(dleft)}j` : `dans ${dleft}j`;
+
+  const body = state.activeTab === 'finance' ? renderFinanceTab(p) : renderPilotageBody(p);
+
+  return `
+    <div class="main-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">${p.client}</div>
+          <div class="panel-sub mono">${p.ref} · échéance ${p.deadline} (${dtext})</div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-small" id="btn-edit-project">Modifier</button>
+          <button class="btn btn-small" id="btn-delete-project">Supprimer</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab ${state.activeTab==='finance'?'active':''}" data-tab="finance">Temps &amp; Rentabilité</div>
+        <div class="tab ${state.activeTab!=='finance'?'active':''}" data-tab="pilotage">Pilotage</div>
+      </div>
+
+      ${body}
+    </div>
+  `;
+}
+
+function renderPilotageBody(p){
+  const pipelineHtml = STAGES.map((s,i)=>{
+    let cls = 'pipeline-seg';
+    if(i < p.stage) cls += ' done';
+    else if(i === p.stage) cls += ` current ${p.health}`;
+    return `<div class="${cls}" data-stage="${i}">${s}</div>`;
+  }).join('');
+
+  const freelancerTags = p.freelancers.map(f=>`<span class="tag">${f}</span>`).join(' ') || '<span style="color:var(--text-secondary);font-size:12px;">Aucun assigné</span>';
+
+  return `
+      <div class="section-label">Avancement</div>
+      <div class="pipeline">${pipelineHtml}</div>
+
+      <div class="section-label">Statut</div>
+      <div class="health-select">
+        <div class="health-btn ${p.health==='ok'?'active ok':''}" data-health="ok">Sur les rails</div>
+        <div class="health-btn ${p.health==='attention'?'active attention':''}" data-health="attention">À surveiller</div>
+        <div class="health-btn ${p.health==='bloque'?'active bloque':''}" data-health="bloque">Bloqué</div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-block">
+          <div class="info-block-label">Indépendants assignés</div>
+          ${freelancerTags}
+        </div>
+        <div class="info-block">
+          <div class="info-block-label">Dernière mise à jour</div>
+          <div class="mono">${p.lastUpdate}</div>
+        </div>
+        <div class="info-block">
+          <div class="info-block-label">Drive du projet</div>
+          ${p.driveLink ? `<a href="${p.driveLink}" target="_blank" rel="noopener" style="color:var(--accent-teal);">Ouvrir le Drive ↗</a>` : '<span style="color:var(--text-secondary);font-size:12px;">Non renseigné</span>'}
+        </div>
+      </div>
+
+      <div class="section-label">Notes / blocages</div>
+      <div class="info-block">${p.notes ? p.notes.replace(/\n/g,'<br>') : '<span style="color:var(--text-secondary);">Aucune note</span>'}</div>
+
+      <div style="margin-top:24px;">
+        <button class="btn btn-primary" id="btn-generate-summary">Générer la synthèse hebdomadaire (tous projets)</button>
+      </div>
+  `;
+}
+
+function renderFinanceTab(p){
+  const fin = computeFinance(p);
+  const ecart = (p.factureCumulee||0) - fin.facturationCumulee;
+
+  if(state.financeMonth === null){
+    const def = pickDefaultMonth(p);
+    const allMonths = Array.from(new Set((p.timeEntries||[]).map(e=>e.month))).sort();
+    if(def){
+      state.periodMode = 'mois';
+      state.financeMonth = def;
+      state.periodFrom = def;
+      state.periodTo = def;
+    } else {
+      state.periodMode = 'plage';
+      state.periodFrom = allMonths[0] || CURRENT_MONTH;
+      state.periodTo = allMonths[allMonths.length-1] || CURRENT_MONTH;
+      state.financeMonth = state.periodTo;
+    }
+  }
+
+  const billingLabels = {
+    regie: 'Régie (jours consommés)',
+    budgetAnnuel: 'Budget annuel alloué',
+    forfaitProjet: 'Forfait projet (jours vendus)',
+    maintenance: 'Support & maintenance (forfait mensuel)'
+  };
+
+  let trackingCardsHtml = '';
+  if(p.billingType === 'forfaitProjet'){
+    trackingCardsHtml = `
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Jours vendus</div>
+          <div class="fin-card-value mono">${fin.joursVendus.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Consommé</div>
+          <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Restant</div>
+          <div class="fin-card-value mono">${fin.restantJours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Mois restants (rythme actuel)</div>
+          <div class="fin-card-value mono">${fin.nbMoisRestant!==null ? fin.nbMoisRestant.toFixed(1) : '—'}</div>
+        </div>
+      </div>
+      <div class="section-label">Avancement</div>
+      <div class="progress-outer"><div class="progress-inner" style="width:${Math.min(100,fin.avancementTps).toFixed(0)}%;"></div></div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${fin.avancementTps.toFixed(0)}% du temps vendu consommé (calcul) — ressenti : ${p.avancementFeeling||0}%</div>
+      <input type="range" min="0" max="100" id="f-avancement-feeling" value="${p.avancementFeeling||0}" style="margin-top:8px;width:100%;">
+    `;
+  } else if(p.billingType === 'budgetAnnuel'){
+    trackingCardsHtml = `
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Budget annuel ${CURRENT_MONTH.slice(0,4)}</div>
+          <div class="fin-card-value mono">${fin.budgetAnnuelJours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Consommé cette année</div>
+          <div class="fin-card-value mono">${fin.joursAnnee.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Restant cette année</div>
+          <div class="fin-card-value mono" style="color:${fin.restantAnnee>=0?'var(--text-primary)':'var(--accent-coral)'}">${fin.restantAnnee.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Consommé total (tous mois)</div>
+          <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
+        </div>
+      </div>
+    `;
+  } else if(p.billingType === 'maintenance'){
+    trackingCardsHtml = `
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Forfait du mois en cours</div>
+          <div class="fin-card-value mono">${formatEUR(getForfaitMensuel(p, CURRENT_MONTH))}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Heures consommées (total)</div>
+          <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
+        </div>
+      </div>
+    `;
+  } else {
+    trackingCardsHtml = `
+      <div class="import-hint" style="margin-top:0;">Projet en régie pure : facturé selon les jours réellement consommés, sans budget initial à surveiller.</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Jours consommés (total)</div>
+          <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const partSousTraitance = fin.facturationCumulee ? (fin.ssTraitanceCumulee/fin.facturationCumulee*100) : 0;
+  const margePctCumulee = fin.facturationCumulee ? (fin.margeCumulee/fin.facturationCumulee*100) : 0;
+
+  function formatDateFr(iso){
+    const [y,m,d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  let periodeLabel;
+  if(fin.premierJour){
+    periodeLabel = fin.premierJour===fin.dernierJour ? formatDateFr(fin.premierJour) : `${formatDateFr(fin.premierJour)} → ${formatDateFr(fin.dernierJour)}`;
+    if(fin.nbSansDate) periodeLabel += ` (+ ${fin.nbSansDate} saisie(s) ancienne(s) sans date exacte, non comptée(s) ici)`;
+  } else if(fin.premierMois){
+    periodeLabel = `${fin.premierMois} → ${fin.dernierMois} (mois seul — aucune de ces saisies n'a de date exacte)`;
+  } else {
+    periodeLabel = 'Aucune saisie';
+  }
+
+  const globalBlock = `
+      <div class="import-hint" style="margin-top:0;margin-bottom:14px;">Typologie de facturation : <strong>${billingLabels[p.billingType] || billingLabels.forfaitProjet}</strong>${getReferenceProject(p) ? ` · TJM &amp; coefficients hérités de ${getReferenceProject(p).client}` : ''}</div>
+      <div class="import-hint" style="margin-top:0;margin-bottom:14px;">Période prise en compte pour les indicateurs ci-dessous : <strong>${periodeLabel}</strong></div>
+
+      ${trackingCardsHtml}
+
+      <div class="section-label">Facturation</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Facturable cumulé (calculé)</div>
+          <div class="fin-card-value mono">${formatEUR(fin.facturationCumulee)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Facturé (saisie manuelle)</div>
+          <div class="fin-card-value mono">${formatEUR(p.factureCumulee||0)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Écart</div>
+          <div class="fin-card-value mono" style="color:${ecart>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(ecart)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Marge cumulée</div>
+          <div class="fin-card-value mono">${formatEUR(fin.margeCumulee)}</div>
+        </div>
+      </div>
+
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Sous-traitance cumulée</div>
+          <div class="fin-card-value mono">${formatEUR(fin.ssTraitanceCumulee)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Part sous-traitance</div>
+          <div class="fin-card-value mono">${partSousTraitance.toFixed(0)}%</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">% Marge Cogitime</div>
+          <div class="fin-card-value mono" style="color:${margePctCumulee>=0?'var(--accent-teal)':'var(--accent-coral)'}">${margePctCumulee.toFixed(0)}%</div>
+        </div>
+      </div>
+  `;
+
+  const rangeFrom = state.periodMode==='mois' ? state.financeMonth : state.periodFrom;
+  const rangeTo = state.periodMode==='mois' ? state.financeMonth : state.periodTo;
+  const breakdown = computeRangeBreakdown(p, rangeFrom, rangeTo);
+  const months = monthsFromEntries(p);
+  const monthOptions = months.map(m=>`<option value="${m}" ${m===state.financeMonth?'selected':''}>${m}</option>`).join('');
+
+  const rowsHtml = breakdown.rows.map(r=>`
+    <tr>
+      <td>${r.name}</td>
+      <td class="mono">${heuresToHHMM(r.heures)}</td>
+      <td class="mono">${r.heures.toFixed(2)}</td>
+      <td class="mono">${r.jours.toFixed(2)}</td>
+      ${p.useCoef ? `<td class="mono">${r.coefMoyen.toFixed(2)}</td><td class="mono">${r.joursFacturables.toFixed(2)}</td>` : ''}
+      <td class="mono">${r.facturation===null ? '—' : formatEUR(r.facturation)}</td>
+      <td class="mono">${r.ssTraitance ? formatEUR(r.ssTraitance) : '—'}</td>
+      <td class="mono">${r.marge===null ? '—' : `${formatEUR(r.marge)} (${r.margePct.toFixed(0)}%)`}</td>
+    </tr>`).join('') || `<tr><td colspan="${p.useCoef?9:7}" style="color:var(--text-secondary);">Aucune saisie sur cette période</td></tr>`;
+
+  const refProject = getReferenceProject(p);
+  const coefEditorHtml = refProject ? `
+      <div class="section-label" style="margin-top:24px;">Coefficients de facturation</div>
+      <div class="import-hint" style="margin-top:0;">Ce projet hérite du TJM vendu et des coefficients de <strong>${refProject.client}</strong> — modifiez-les depuis ce projet de référence.</div>
+  ` : (p.useCoef && state.periodMode==='mois') ? `
+      <div class="section-label" style="margin-top:24px;">Coefficients de facturation — ${state.financeMonth}</div>
+      <div class="import-hint" style="margin-top:0;">Multiplie les heures réelles pour obtenir les heures vendues au client sur ce projet. Par défaut, reprend la valeur du mois précédent (1 si jamais défini).</div>
+      ${breakdown.rows.map(r=>`
+        <div class="freelancer-tjm-row">
+          <div class="fname">${r.name}</div>
+          <input type="text" class="f-coef-value" data-name="${encodeURIComponent(r.name)}" value="${getCoefficient(p, r.name, state.financeMonth)}" style="width:70px;flex:none;">
+          <button class="btn btn-small btn-save-coef" data-name="${encodeURIComponent(r.name)}">Enregistrer</button>
+        </div>
+      `).join('')}
+  ` : '';
+
+  const forfaitEditorHtml = (p.billingType==='maintenance' && state.periodMode==='mois') ? `
+      <div class="section-label" style="margin-top:24px;">Forfait mensuel — ${state.financeMonth}</div>
+      <div class="import-hint" style="margin-top:0;">Montant facturé au client ce mois-ci, indépendamment des heures. Reprend par défaut la valeur du mois précédent tant qu'il n'est pas changé.</div>
+      <div class="freelancer-tjm-row">
+        <div class="fname">Forfait (€)</div>
+        <input type="text" id="f-forfait-value" value="${getForfaitMensuel(p, state.financeMonth)}" style="width:120px;flex:none;">
+        <button class="btn btn-small" id="btn-save-forfait">Enregistrer</button>
+      </div>
+  ` : '';
+
+  const periodBlock = `
+      <div class="month-select-row">
+        <label style="margin:0;">Période</label>
+        <select id="f-period-mode">
+          <option value="mois" ${state.periodMode==='mois'?'selected':''}>Mois calendaire</option>
+          <option value="plage" ${state.periodMode==='plage'?'selected':''}>Plage personnalisée</option>
+        </select>
+        ${state.periodMode==='mois'
+          ? `<select id="f-finance-month">${monthOptions}</select>`
+          : `<input type="month" id="f-period-from" value="${state.periodFrom}" style="width:auto;"><span style="color:var(--text-secondary);">→</span><input type="month" id="f-period-to" value="${state.periodTo}" style="width:auto;">`
+        }
+      </div>
+
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Jours (période)</div>
+          <div class="fin-card-value mono">${breakdown.totals.jours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Facturation (période)</div>
+          <div class="fin-card-value mono">${formatEUR(breakdown.totals.facturation)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Sous-traitance (période)</div>
+          <div class="fin-card-value mono">${formatEUR(breakdown.totals.ssTraitance)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Marge (période)</div>
+          <div class="fin-card-value mono">${formatEUR(breakdown.totals.marge)} (${breakdown.totals.margePct.toFixed(0)}%)</div>
+        </div>
+      </div>
+
+      <div class="month-select-row">
+        <button class="btn btn-small" id="btn-import-odoo">Importer les heures Odoo</button>
+        <button class="btn btn-small" id="btn-add-entry">+ Ajouter une saisie</button>
+        <button class="btn btn-small btn-ghost" id="btn-clear-period">Effacer cette période</button>
+        <button class="btn btn-small btn-ghost" id="btn-clear-entries" style="margin-left:auto;">Vider tout</button>
+      </div>
+
+      <div class="section-label">Détail par indépendant</div>
+      <table class="data-table">
+        <thead><tr><th>Indépendant</th><th>Heures saisie</th><th>Heures</th><th>Jours</th>${p.useCoef ? '<th>Coef</th><th>Jours facturés</th>' : ''}<th>Facturation</th><th>Sous-traitance</th><th>Marge</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot><tr>
+          <td>Total</td>
+          <td class="mono">${heuresToHHMM(breakdown.totals.heures)}</td>
+          <td class="mono">${breakdown.totals.heures.toFixed(2)}</td>
+          <td class="mono">${breakdown.totals.jours.toFixed(2)}</td>
+          ${p.useCoef ? `<td class="mono">—</td><td class="mono">${breakdown.totals.joursFacturables.toFixed(2)}</td>` : ''}
+          <td class="mono">${formatEUR(breakdown.totals.facturation)}</td>
+          <td class="mono">${formatEUR(breakdown.totals.ssTraitance)}</td>
+          <td class="mono">${formatEUR(breakdown.totals.marge)} (${breakdown.totals.margePct.toFixed(0)}%)</td>
+        </tr></tfoot>
+      </table>
+      ${coefEditorHtml}
+      ${forfaitEditorHtml}
+  `;
+
+  return `
+    <div class="tabs" style="margin-bottom:16px;">
+      <div class="tab ${state.financeViewMode!=='periode'?'active':''}" data-fview="global">Vue globale</div>
+      <div class="tab ${state.financeViewMode==='periode'?'active':''}" data-fview="periode">Vue période</div>
+    </div>
+    <div>
+      ${state.financeViewMode==='periode' ? periodBlock : globalBlock}
+    </div>
+  `;
+}
+
+function renderFreelancersBar(){
+  const chips = state.freelancers.map(f=>{
+    const load = state.projects.filter(p=>p.freelancers.includes(f.name)).length;
+    return `<div class="freelancer-chip" data-id="${f.id}">${f.name} <span class="freelancer-load">${load}</span></div>`;
+  }).join('');
+  return `
+    <div class="freelancers-bar">
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;margin-right:6px;">Indépendants</div>
+      ${chips}
+      <button class="btn btn-small btn-ghost" id="btn-add-freelancer">+ Ajouter</button>
+    </div>
+  `;
+}
+
+function pickGlobalDefaultMonth(){
+  const allMonths = new Set();
+  state.projects.forEach(p=> (p.timeEntries||[]).forEach(e=> allMonths.add(e.month)));
+  if(allMonths.has(CURRENT_MONTH)) return CURRENT_MONTH;
+  const prev = shiftMonth(CURRENT_MONTH, -1);
+  if(allMonths.has(prev)) return prev;
+  const sorted = Array.from(allMonths).sort();
+  return sorted.length ? sorted[sorted.length-1] : CURRENT_MONTH;
+}
+
+function normalizeName(name){
+  return (name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+
+function isSebastienName(name){
+  return normalizeName(name).includes('sebastien');
+}
+
+function monthMatches(entryMonth, filterMonth){
+  return filterMonth==='all' || entryMonth===filterMonth;
+}
+
+function forfaitForPeriod(project, month){
+  if(month!=='all') return getForfaitMensuel(project, month);
+  const months = Array.from(new Set((project.timeEntries||[]).map(e=>e.month))).sort();
+  if(!months.length) return 0;
+  return monthsBetween(months[0], months[months.length-1]).reduce((s,m)=> s + getForfaitMensuel(project, m), 0);
+}
+
+function isSebastienOnlyProject(project, month){
+  const names = new Set((project.timeEntries||[]).filter(e=>monthMatches(e.month, month)).map(e=>e.freelancer));
+  if(names.size !== 1) return false;
+  return isSebastienName(Array.from(names)[0]);
+}
+
+function computeGlobalMonthData(month, excludeSebastienOnly){
+  let totalHeures = 0, internalHeures = 0, externalHeures = 0;
+  const byFreelancer = {};
+  const byProject = {};
+  state.projects.forEach(p=>{
+    if(excludeSebastienOnly && isSebastienOnlyProject(p, month)) return;
+    let hasEntriesThisMonth = false;
+    (p.timeEntries||[]).forEach(e=>{
+      if(!monthMatches(e.month, month)) return;
+      hasEntriesThisMonth = true;
+      totalHeures += e.heures;
+      const fl = state.freelancers.find(f=>f.name===e.freelancer);
+      const type = fl ? fl.type : 'externe';
+      if(type==='interne'){ internalHeures += e.heures; } else { externalHeures += e.heures; }
+      if(!byFreelancer[e.freelancer]) byFreelancer[e.freelancer] = {heures:0, type, tjmCout: fl?(fl.tjmCout||0):0};
+      byFreelancer[e.freelancer].heures += e.heures;
+      if(!byProject[p.id]) byProject[p.id] = {client:p.client, ref:p.ref, heures:0, joursFacturables:0, tjmVendu:getEffectiveTjmVendu(p), montantOverride:null};
+      byProject[p.id].heures += e.heures;
+      const coef = getEffectiveCoefficient(p, e.freelancer, e.month);
+      byProject[p.id].joursFacturables += (e.heures/7) * coef;
+    });
+    if(p.billingType==='maintenance' && (hasEntriesThisMonth || forfaitForPeriod(p, month))){
+      if(!byProject[p.id]) byProject[p.id] = {client:p.client, ref:p.ref, heures:0, joursFacturables:0, tjmVendu:0, montantOverride:null};
+      byProject[p.id].montantOverride = forfaitForPeriod(p, month);
+    }
+  });
+  return {totalHeures, internalHeures, externalHeures, byFreelancer, byProject};
+}
+
+function ensureGlobalMonth(){
+  const allMonthsSet = new Set([CURRENT_MONTH]);
+  state.projects.forEach(p=> (p.timeEntries||[]).forEach(e=> allMonthsSet.add(e.month)));
+  const allMonths = Array.from(allMonthsSet).sort();
+  if(!state.globalFinanceMonth || (state.globalFinanceMonth!=='all' && !allMonths.includes(state.globalFinanceMonth))){
+    state.globalFinanceMonth = pickGlobalDefaultMonth();
+  }
+  return allMonths;
+}
+
+function renderGlobalMonthlyBody(){
+  const excludeSebastienOnly = state.globalMonthlyFilter === 'excludeSebastien';
+  const data = computeGlobalMonthData(state.globalFinanceMonth, excludeSebastienOnly);
+  const excludedCount = state.projects.filter(p=> isSebastienOnlyProject(p, state.globalFinanceMonth)).length;
+  const periodLabel = state.globalFinanceMonth==='all' ? 'globale (tous les mois)' : 'du mois';
+  const periodEmptyLabel = state.globalFinanceMonth==='all' ? 'Aucune saisie' : 'Aucune saisie ce mois-ci';
+  const totalJours = data.totalHeures/7;
+  const internalJours = data.internalHeures/7;
+  const externalJours = data.externalHeures/7;
+
+  const freelancerRows = Object.keys(data.byFreelancer).map(name=>{
+    const f = data.byFreelancer[name];
+    const jours = f.heures/7;
+    const montant = f.type!=='interne' ? jours*(f.tjmCout||0) : 0;
+    return {name, type:f.type, heures:f.heures, jours, tjmCout:f.tjmCout, montant};
+  }).sort((a,b)=> b.montant-a.montant);
+
+  const projectRows = Object.keys(data.byProject).map(id=>{
+    const pr = data.byProject[id];
+    const jours = pr.heures/7;
+    const montant = pr.montantOverride!==null ? pr.montantOverride : pr.joursFacturables*(pr.tjmVendu||0);
+    return {client:pr.client, ref:pr.ref, heures:pr.heures, jours, tjmVendu:pr.tjmVendu, montant};
+  }).sort((a,b)=> b.montant-a.montant);
+
+  const totalAPayer = freelancerRows.reduce((s,r)=>s+r.montant,0);
+  const totalAFacturer = projectRows.reduce((s,r)=>s+r.montant,0);
+  const margeGlobale = totalAFacturer - totalAPayer;
+
+  const freelancerRowsHtml = freelancerRows.map(r=>`
+    <tr>
+      <td>${r.name}</td>
+      <td class="mono">${r.type==='interne'?'Interne':'Externe'}</td>
+      <td class="mono">${heuresToHHMM(r.heures)}</td>
+      <td class="mono">${r.heures.toFixed(2)}</td>
+      <td class="mono">${r.jours.toFixed(2)}</td>
+      <td class="mono">${r.type!=='interne' ? formatEUR(r.tjmCout||0) : '—'}</td>
+      <td class="mono">${r.type!=='interne' ? formatEUR(r.montant) : '—'}</td>
+    </tr>`).join('') || `<tr><td colspan="7" style="color:var(--text-secondary);">Aucune saisie ce mois-ci</td></tr>`;
+
+  const projectRowsHtml = projectRows.map(r=>`
+    <tr>
+      <td>${r.client} <span class="mono" style="color:var(--text-secondary);font-size:11px;">${r.ref}</span></td>
+      <td class="mono">${heuresToHHMM(r.heures)}</td>
+      <td class="mono">${r.heures.toFixed(2)}</td>
+      <td class="mono">${r.jours.toFixed(2)}</td>
+      <td class="mono">${formatEUR(r.tjmVendu||0)}</td>
+      <td class="mono">${formatEUR(r.montant)}</td>
+    </tr>`).join('') || `<tr><td colspan="6" style="color:var(--text-secondary);">Aucune saisie ce mois-ci</td></tr>`;
+
+  return `
+      <div class="month-select-row">
+        <select id="f-monthly-filter">
+          <option value="all" ${state.globalMonthlyFilter==='all'?'selected':''}>Vue globale — tous les projets</option>
+          <option value="excludeSebastien" ${state.globalMonthlyFilter==='excludeSebastien'?'selected':''}>Vue globale — hors missions Sébastien seul${excludedCount ? ` (${excludedCount} exclu${excludedCount>1?'s':''})` : ''}</option>
+        </select>
+      </div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Jours totaux</div>
+          <div class="fin-card-value mono">${totalJours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Dont interne</div>
+          <div class="fin-card-value mono">${internalJours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Dont sous-traité</div>
+          <div class="fin-card-value mono">${externalJours.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Marge ${periodLabel}</div>
+          <div class="fin-card-value mono" style="color:${margeGlobale>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(margeGlobale)}</div>
+        </div>
+      </div>
+
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Total à payer aux collaborateurs</div>
+          <div class="fin-card-value mono">${formatEUR(totalAPayer)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Total à facturer aux clients</div>
+          <div class="fin-card-value mono">${formatEUR(totalAFacturer)}</div>
+        </div>
+      </div>
+
+      <div class="section-label">À payer par collaborateur</div>
+      <table class="data-table">
+        <thead><tr><th>Nom</th><th>Type</th><th>Heures saisie</th><th>Heures</th><th>Jours</th><th>TJM coût</th><th>Montant à payer</th></tr></thead>
+        <tbody>${freelancerRowsHtml}</tbody>
+      </table>
+
+      <div class="section-label" style="margin-top:24px;">À facturer par projet</div>
+      <table class="data-table">
+        <thead><tr><th>Projet</th><th>Heures saisie</th><th>Heures</th><th>Jours</th><th>TJM vendu</th><th>Montant à facturer</th></tr></thead>
+        <tbody>${projectRowsHtml}</tbody>
+      </table>
+  `;
+}
+
+function collectAllEntries(){
+  const list = [];
+  state.projects.forEach(p=>{
+    (p.timeEntries||[]).forEach(e=>{
+      list.push({
+        entryId:e.id, projectId:p.id, projectClient:p.client, projectRef:p.ref,
+        freelancer:e.freelancer, month:e.month, heures:e.heures, sourceId:e.sourceId
+      });
+    });
+  });
+  return list;
+}
+
+function heuresToHHMM(heures){
+  const totalMinutes = Math.round((heures||0) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+function sourceLabel(sourceId){
+  if(!sourceId) return 'Saisie manuelle';
+  if(sourceId.toString().startsWith('fb:')) return 'Import (sans ID)';
+  return 'Import Odoo';
+}
+
+function getFilteredEntries(){
+  const all = collectAllEntries();
+  const months = Array.from(new Set(all.map(e=>e.month))).sort();
+  const freelancerNames = Array.from(new Set(all.map(e=>e.freelancer))).sort();
+
+  if(!months.includes(state.linesFilterMonth)) state.linesFilterMonth = 'all';
+  if(!state.projects.some(p=>p.id===state.linesFilterProject)) state.linesFilterProject = 'all';
+  if(!freelancerNames.includes(state.linesFilterFreelancer)) state.linesFilterFreelancer = 'all';
+
+  const filtered = all.filter(e=>
+    (state.linesFilterMonth==='all' || e.month===state.linesFilterMonth) &&
+    (state.linesFilterProject==='all' || e.projectId===state.linesFilterProject) &&
+    (state.linesFilterFreelancer==='all' || e.freelancer===state.linesFilterFreelancer)
+  ).sort((a,b)=> (b.month.localeCompare(a.month)) || a.projectClient.localeCompare(b.projectClient) || a.freelancer.localeCompare(b.freelancer));
+
+  return {all, months, freelancerNames, filtered};
+}
+
+function groupFilteredEntries(filtered, groupBy){
+  const groups = {};
+  filtered.forEach(e=>{
+    let key, label;
+    if(groupBy==='project'){ key = e.projectId; label = e.projectClient; }
+    else if(groupBy==='freelancer'){ key = e.freelancer; label = e.freelancer; }
+    else { key = e.month; label = e.month; }
+    if(!groups[key]) groups[key] = {key, label, heures:0, count:0, items:[]};
+    groups[key].heures += e.heures;
+    groups[key].count += 1;
+    groups[key].items.push({projectId:e.projectId, entryId:e.entryId});
+  });
+  return Object.values(groups).sort((a,b)=> b.heures-a.heures);
+}
+
+function renderGlobalLinesBody(){
+  const {months, freelancerNames, filtered} = getFilteredEntries();
+
+  const totalHeures = filtered.reduce((s,e)=>s+e.heures,0);
+  const totalJours = totalHeures/7;
+
+  const monthOptions = `<option value="all">Tous les mois</option>` + months.map(m=>`<option value="${m}" ${state.linesFilterMonth===m?'selected':''}>${m}</option>`).join('');
+  const projectOptions = `<option value="all">Tous les projets</option>` + state.projects.map(p=>`<option value="${p.id}" ${state.linesFilterProject===p.id?'selected':''}>${p.client}</option>`).join('');
+  const freelancerOptions = `<option value="all">Tous les collaborateurs</option>` + freelancerNames.map(n=>`<option value="${n}" ${state.linesFilterFreelancer===n?'selected':''}>${n}</option>`).join('');
+
+  const groupLabels = {none:'Aucun', project:'Projet', freelancer:'Collaborateur', month:'Mois'};
+  const groupOptions = Object.keys(groupLabels).map(k=>`<option value="${k}" ${state.linesGroupBy===k?'selected':''}>Grouper par : ${groupLabels[k]}</option>`).join('');
+
+  let tableHtml;
+  if(state.linesGroupBy==='none'){
+    const rowsHtml = filtered.map(e=>`
+      <tr>
+        <td class="mono">${e.month}</td>
+        <td>${e.projectClient} <span class="mono" style="color:var(--text-secondary);font-size:11px;">${e.projectRef}</span></td>
+        <td>${e.freelancer}</td>
+        <td class="mono">${heuresToHHMM(e.heures)}</td>
+        <td class="mono">${e.heures.toFixed(2)}</td>
+        <td class="mono">${(e.heures/7).toFixed(2)}</td>
+        <td style="color:var(--text-secondary);font-size:12px;">${sourceLabel(e.sourceId)}</td>
+        <td style="text-align:center;white-space:nowrap;">
+          <button class="btn btn-small btn-ghost btn-edit-line" data-project="${e.projectId}" data-entry="${e.entryId}" style="padding:2px 8px;">Modifier</button>
+          <button class="btn btn-small btn-ghost btn-delete-line" data-project="${e.projectId}" data-entry="${e.entryId}" style="padding:2px 8px;">Supprimer</button>
+        </td>
+      </tr>`).join('') || `<tr><td colspan="8" style="color:var(--text-secondary);">Aucune ligne ne correspond aux filtres</td></tr>`;
+
+    tableHtml = `
+      <table class="data-table">
+        <thead><tr><th>Mois</th><th>Projet</th><th>Collaborateur</th><th>Heures saisie</th><th>Heures</th><th>Jours</th><th>Origine</th><th></th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+  } else {
+    const groups = groupFilteredEntries(filtered, state.linesGroupBy);
+    const groupRowsHtml = groups.map(g=>`
+      <tr>
+        <td>${g.label}</td>
+        <td class="mono">${g.count}</td>
+        <td class="mono">${heuresToHHMM(g.heures)}</td>
+        <td class="mono">${g.heures.toFixed(2)}</td>
+        <td class="mono">${(g.heures/7).toFixed(2)}</td>
+        <td style="text-align:center;"><button class="btn btn-small btn-ghost btn-delete-group" data-key="${encodeURIComponent(g.key)}" style="padding:2px 8px;">Supprimer</button></td>
+      </tr>`).join('') || `<tr><td colspan="6" style="color:var(--text-secondary);">Aucune ligne ne correspond aux filtres</td></tr>`;
+
+    tableHtml = `
+      <table class="data-table">
+        <thead><tr><th>${groupLabels[state.linesGroupBy]}</th><th>Lignes</th><th>Heures saisie</th><th>Heures</th><th>Jours</th><th></th></tr></thead>
+        <tbody>${groupRowsHtml}</tbody>
+      </table>`;
+  }
+
+  return `
+      <div class="month-select-row">
+        <select id="f-lines-month">${monthOptions}</select>
+        <select id="f-lines-project">${projectOptions}</select>
+        <select id="f-lines-freelancer">${freelancerOptions}</select>
+        <select id="f-lines-groupby">${groupOptions}</select>
+        <div style="margin-left:auto;color:var(--text-secondary);font-size:12px;" class="mono">${filtered.length} ligne(s) · ${heuresToHHMM(totalHeures)} · ${totalHeures.toFixed(2)}h · ${totalJours.toFixed(2)}j</div>
+      </div>
+      ${(state.linesGroupBy==='none' && filtered.length) ? `<div class="month-select-row"><button class="btn btn-small btn-ghost" id="btn-delete-filtered">Supprimer les ${filtered.length} ligne(s) affichée(s)</button></div>` : ''}
+      ${tableHtml}
+  `;
+}
+
+function computeSubcontractorBreakdown(month){
+  const result = {};
+  state.projects.forEach(p=>{
+    (p.timeEntries||[]).forEach(e=>{
+      if(!monthMatches(e.month, month)) return;
+      const fl = state.freelancers.find(f=>f.name===e.freelancer);
+      const type = fl ? fl.type : 'externe';
+      if(!result[e.freelancer]) result[e.freelancer] = {name:e.freelancer, type, tjmCout: fl?(fl.tjmCout||0):0, projects:{}};
+      const r = result[e.freelancer];
+      if(!r.projects[p.id]) r.projects[p.id] = {client:p.client, ref:p.ref, tjmVendu: p.billingType==='maintenance' ? 0 : getEffectiveTjmVendu(p), heures:0, joursFacturables:0};
+      r.projects[p.id].heures += e.heures;
+      const coef = getEffectiveCoefficient(p, e.freelancer, e.month);
+      r.projects[p.id].joursFacturables += (e.heures/7) * coef;
+    });
+  });
+  return Object.values(result).map(r=>{
+    const projectsList = Object.values(r.projects).map(pr=>{
+      const jours = pr.heures/7;
+      const joursFacturables = pr.joursFacturables;
+      const coef = jours ? Math.round((joursFacturables/jours)*10000)/10000 : 1;
+      const montantSousTraitant = jours * r.tjmCout;
+      const montantFacture = pr.tjmVendu ? joursFacturables * pr.tjmVendu : 0;
+      const marge = montantFacture - montantSousTraitant;
+      return {...pr, jours, joursFacturables, coef, montantSousTraitant, montantFacture, marge};
+    }).sort((a,b)=> b.heures-a.heures);
+    const totalHeures = projectsList.reduce((s,x)=>s+x.heures,0);
+    const totalMontant = projectsList.reduce((s,x)=>s+x.montantSousTraitant,0);
+    const totalFacture = projectsList.reduce((s,x)=>s+x.montantFacture,0);
+    return {name:r.name, type:r.type, tjmCout:r.tjmCout, projectsList, totalHeures, totalMontant, totalFacture, totalMarge: totalFacture-totalMontant};
+  }).sort((a,b)=> b.totalMontant-a.totalMontant);
+}
+
+function renderGlobalSubcontractorsBody(){
+  const data = computeSubcontractorBreakdown(state.globalFinanceMonth);
+
+  if(!data.length){
+    return `<div class="empty-state" style="height:200px;">Aucune heure saisie sur cette période.</div>`;
+  }
+
+  const sections = data.map(r=>{
+    const rowsHtml = r.projectsList.map(pr=>`
+      <tr>
+        <td>${pr.client} <span class="mono" style="color:var(--text-secondary);font-size:11px;">${pr.ref}</span>${pr.coef && pr.coef!==1 ? ` <span class="mono" style="color:var(--accent-amber);font-size:11px;">×${pr.coef}</span>` : ''}</td>
+        <td class="mono">${heuresToHHMM(pr.heures)}</td>
+        <td class="mono">${pr.heures.toFixed(2)}</td>
+        <td class="mono">${pr.jours.toFixed(2)}</td>
+        <td class="mono">${formatEUR(pr.montantSousTraitant)}</td>
+        <td class="mono">${pr.tjmVendu ? formatEUR(pr.tjmVendu) : '—'}</td>
+        <td class="mono">${pr.tjmVendu ? formatEUR(pr.montantFacture) : '—'}</td>
+        <td class="mono">${pr.tjmVendu ? formatEUR(pr.marge) : '—'}</td>
+        <td class="mono">${pr.tjmVendu && pr.montantFacture ? `(${(pr.marge/pr.montantFacture*100).toFixed(0)}%)` : '—'}</td>
+      </tr>`).join('');
+
+    return `
+      <div class="info-block" style="margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div style="font-weight:600;font-size:15px;">${r.name} <span style="font-weight:400;font-size:12px;color:var(--text-secondary);">(${r.type==='interne'?'Interne':'Externe'})</span></div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="margin:0;font-size:12px;">TJM coût</label>
+            <input type="text" class="f-inline-tjm" data-name="${encodeURIComponent(r.name)}" value="${r.tjmCout||''}" style="width:90px;">
+            <button class="btn btn-small btn-save-tjm" data-name="${encodeURIComponent(r.name)}">Enregistrer</button>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Projet</th><th>Heures saisie</th><th>Heures</th><th>Jours</th><th>Coût</th><th>TJM vendu</th><th>Facturé client</th><th>Marge Cogitime</th><th>%</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot><tr>
+            <td>Total ${r.name}</td>
+            <td class="mono">${heuresToHHMM(r.totalHeures)}</td>
+            <td class="mono">${r.totalHeures.toFixed(2)}</td>
+            <td class="mono">${(r.totalHeures/7).toFixed(2)}</td>
+            <td class="mono">${formatEUR(r.totalMontant)}</td>
+            <td class="mono">—</td>
+            <td class="mono">${formatEUR(r.totalFacture)}</td>
+            <td class="mono">${formatEUR(r.totalMarge)}</td>
+            <td class="mono">${r.totalFacture ? `(${(r.totalMarge/r.totalFacture*100).toFixed(0)}%)` : '—'}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="import-hint" style="margin-bottom:14px;">Pour chaque collaborateur (interne ou externe) : ses projets sur la période, les heures saisies, et son coût (TJM coût × jours) — pour un externe, à comparer avec sa facture ; pour un interne, dérivé si besoin de son salaire. Les colonnes de droite montrent ce que ces mêmes heures rapportent à Cogitime, quand le projet a un TJM vendu renseigné.</div>
+    ${sections}
+  `;
+}
+
+function computeProjectMarginBreakdown(month, excludeSebastienOnly){
+  return state.projects.filter(p=> !(excludeSebastienOnly && isSebastienOnlyProject(p, month))).map(p=>{
+    const entries = (p.timeEntries||[]).filter(e=>monthMatches(e.month, month));
+    const byFreelancer = {};
+    entries.forEach(e=>{
+      if(!byFreelancer[e.freelancer]) byFreelancer[e.freelancer] = {heures:0, joursFacturables:0};
+      byFreelancer[e.freelancer].heures += e.heures;
+      byFreelancer[e.freelancer].joursFacturables += (e.heures/7) * getEffectiveCoefficient(p, e.freelancer, e.month);
+    });
+    const isMaintenance = p.billingType === 'maintenance';
+    const tjmVendu = getEffectiveTjmVendu(p);
+    const freelancerDetails = Object.keys(byFreelancer).map(name=>{
+      const heures = byFreelancer[name].heures;
+      const jours = heures/7;
+      const joursFacturables = byFreelancer[name].joursFacturables;
+      const coef = jours ? Math.round((joursFacturables/jours)*10000)/10000 : 1;
+      const fl = state.freelancers.find(f=>f.name===name);
+      const type = fl ? fl.type : 'externe';
+      const tjmCout = (type!=='interne') ? (fl?(fl.tjmCout||0):0) : 0;
+      const montant = jours*tjmCout;
+      return {name, heures, jours, coef, joursFacturables, tjmCout, montant, type};
+    });
+    const totalHeures = entries.reduce((s,e)=>s+e.heures,0);
+    const totalJours = totalHeures/7;
+    const totalJoursFacturables = freelancerDetails.reduce((s,f)=>s+f.joursFacturables,0);
+    const totalCout = freelancerDetails.reduce((s,f)=>s+f.montant,0);
+    const montantFacture = isMaintenance ? forfaitForPeriod(p, month) : (tjmVendu ? totalJoursFacturables*tjmVendu : 0);
+    const hasActivity = totalHeures>0 || (isMaintenance && montantFacture>0);
+    return {
+      client:p.client, ref:p.ref, tjmVendu, useCoef:p.useCoef, billingType:p.billingType, isMaintenance, hasActivity,
+      totalHeures, totalJours, totalJoursFacturables, montantFacture, totalCout,
+      marge: montantFacture - totalCout, freelancerDetails
+    };
+  }).filter(r=> r.hasActivity).sort((a,b)=> b.marge-a.marge);
+}
+
+function renderGlobalMarginBody(){
+  const excludeSebastienOnly = state.globalMonthlyFilter === 'excludeSebastien';
+  const rows = computeProjectMarginBreakdown(state.globalFinanceMonth, excludeSebastienOnly);
+  const excludedCount = state.projects.filter(p=> isSebastienOnlyProject(p, state.globalFinanceMonth)).length;
+
+  const filterRowHtml = `
+      <div class="month-select-row">
+        <select id="f-monthly-filter">
+          <option value="all" ${state.globalMonthlyFilter==='all'?'selected':''}>Vue globale — tous les projets</option>
+          <option value="excludeSebastien" ${state.globalMonthlyFilter==='excludeSebastien'?'selected':''}>Vue globale — hors missions Sébastien seul${excludedCount ? ` (${excludedCount} exclu${excludedCount>1?'s':''})` : ''}</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;margin-left:auto;">
+          <input type="checkbox" id="f-margin-details" ${state.marginShowDetails?'checked':''} style="width:auto;">
+          <span style="font-size:13px;">Afficher le détail des calculs</span>
+        </label>
+      </div>
+  `;
+
+  if(!rows.length){
+    return filterRowHtml + `<div class="empty-state" style="height:200px;">Aucune saisie de temps sur ce mois.</div>`;
+  }
+
+  const billingLabels = {
+    regie: 'Régie',
+    budgetAnnuel: 'Budget annuel',
+    forfaitProjet: 'Forfait projet',
+    maintenance: 'Maintenance'
+  };
+
+  const totalFacture = rows.reduce((s,r)=>s+r.montantFacture,0);
+  const totalCout = rows.reduce((s,r)=>s+r.totalCout,0);
+  const totalMarge = rows.reduce((s,r)=>s+r.marge,0);
+
+  const byType = {};
+  rows.forEach(r=>{
+    const key = r.billingType || 'forfaitProjet';
+    if(!byType[key]) byType[key] = {facture:0, cout:0, marge:0, count:0};
+    byType[key].facture += r.montantFacture;
+    byType[key].cout += r.totalCout;
+    byType[key].marge += r.marge;
+    byType[key].count += 1;
+  });
+  const typeCardsHtml = Object.keys(byType).map(k=>`
+    <div class="fin-card">
+      <div class="fin-card-label">${billingLabels[k]||k} (${byType[k].count} projet${byType[k].count>1?'s':''})</div>
+      <div class="fin-card-value mono" style="color:${byType[k].marge>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(byType[k].marge)}</div>
+    </div>
+  `).join('');
+
+  const rowsHtml = rows.map(r=>{
+    const detailCout = r.freelancerDetails.length
+      ? r.freelancerDetails.map(f=> f.type==='interne'
+          ? `${f.name} : ${f.jours.toFixed(2)}j (interne, non intégré à la marge projet)`
+          : `${f.name} : ${f.jours.toFixed(2)}j × ${formatEUR(f.tjmCout)} = ${formatEUR(f.montant)}`
+        ).join('<br>')
+      : '—';
+    let detailFacture;
+    if(r.isMaintenance){
+      detailFacture = `Forfait mensuel fixe`;
+    } else if(!r.tjmVendu){
+      detailFacture = 'TJM vendu non renseigné';
+    } else if(r.useCoef){
+      detailFacture = r.freelancerDetails.map(f=> `${f.name} : ${f.jours.toFixed(2)}j${f.coef!==1?` × coef ${f.coef}`:''} = ${f.joursFacturables.toFixed(2)}j facturés`).join('<br>') + `<br>Total ${r.totalJoursFacturables.toFixed(2)}j × ${formatEUR(r.tjmVendu)}`;
+    } else {
+      detailFacture = `${r.totalJours.toFixed(2)}j × ${formatEUR(r.tjmVendu)}`;
+    }
+
+    return `
+      <tr>
+        <td>${r.client} <span class="mono" style="color:var(--text-secondary);font-size:11px;">${r.ref}</span></td>
+        <td style="color:var(--text-secondary);font-size:12px;">${billingLabels[r.billingType]||billingLabels.forfaitProjet}</td>
+        <td class="mono">${heuresToHHMM(r.totalHeures)}</td>
+        <td class="mono">${r.totalHeures.toFixed(2)}</td>
+        <td class="mono">${r.totalJours.toFixed(2)}</td>
+        <td class="mono">
+          ${formatEUR(r.montantFacture)}
+          ${state.marginShowDetails ? `<div style="color:var(--text-secondary);font-size:11px;font-weight:400;">${detailFacture}</div>` : ''}
+        </td>
+        <td class="mono">
+          ${formatEUR(r.totalCout)}
+          ${state.marginShowDetails ? `<div style="color:var(--text-secondary);font-size:11px;font-weight:400;">${detailCout}</div>` : ''}
+        </td>
+        <td class="mono" style="color:${r.marge>=0?'var(--accent-teal)':'var(--accent-coral)'};font-weight:600;">${formatEUR(r.marge)}</td>
+        <td class="mono" style="color:${r.marge>=0?'var(--accent-teal)':'var(--accent-coral)'};">${r.montantFacture ? `(${(r.marge/r.montantFacture*100).toFixed(0)}%)` : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  return filterRowHtml + `
+    <div class="import-hint" style="margin-bottom:14px;">Marge = montant facturé au client − coût total des collaborateurs (jours × TJM coût, 0€ pour les internes). Le calcul de facturation dépend du type de projet (régie/budget annuel/forfait : jours × TJM vendu ; maintenance : forfait fixe). Le détail est affiché sous chaque montant.</div>
+    <div class="fin-cards">
+      <div class="fin-card">
+        <div class="fin-card-label">Total facturé</div>
+        <div class="fin-card-value mono">${formatEUR(totalFacture)}</div>
+      </div>
+      <div class="fin-card">
+        <div class="fin-card-label">Total coût collaborateurs</div>
+        <div class="fin-card-value mono">${formatEUR(totalCout)}</div>
+      </div>
+      <div class="fin-card">
+        <div class="fin-card-label">Marge totale</div>
+        <div class="fin-card-value mono" style="color:${totalMarge>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(totalMarge)}</div>
+      </div>
+    </div>
+    <div class="section-label">Marge par typologie de facturation</div>
+    <div class="fin-cards">
+      ${typeCardsHtml}
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Projet</th><th>Type</th><th>Heures saisie</th><th>Heures</th><th>Jours</th><th>Facturé client</th><th>Coût collaborateurs</th><th>Marge</th><th>%</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function renderGlobalFinanceView(){
+  const allMonths = ensureGlobalMonth();
+  const monthOptions = `<option value="all" ${state.globalFinanceMonth==='all'?'selected':''}>Tous les mois (vision globale)</option>` +
+    allMonths.map(m=>`<option value="${m}" ${m===state.globalFinanceMonth?'selected':''}>${m}</option>`).join('');
+
+  let body;
+  if(state.globalSubTab==='lines') body = renderGlobalLinesBody();
+  else if(state.globalSubTab==='subcontractors') body = renderGlobalSubcontractorsBody();
+  else if(state.globalSubTab==='margin') body = renderGlobalMarginBody();
+  else body = renderGlobalMonthlyBody();
+
+  const tabDefs = [
+    {key:'monthly', label:'Vue mensuelle'},
+    {key:'subcontractors', label:'Collaborateurs'},
+    {key:'margin', label:'Marge par projet'},
+    {key:'lines', label:'Détail des lignes importées'}
+  ];
+  const tabsHtml = tabDefs.map(t=>`<div class="tab ${state.globalSubTab===t.key || (t.key==='monthly' && !['subcontractors','margin','lines'].includes(state.globalSubTab)) ?'active':''}" data-gtab="${t.key}">${t.label}</div>`).join('');
+
+  return `
+    <div class="main-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Rentabilité globale</div>
+          <div class="panel-sub">Tous projets confondus</div>
+        </div>
+      </div>
+
+      <div class="month-select-row">
+        <label style="margin:0;">Mois</label>
+        <select id="f-global-month">${monthOptions}</select>
+        <button class="btn btn-small btn-ghost" id="btn-clear-all-projects" style="margin-left:auto;">Vider toutes les saisies (tous projets)</button>
+      </div>
+
+      <div class="tabs">
+        ${tabsHtml}
+      </div>
+
+      ${body}
+    </div>
+  `;
+}
+
+function attachGlobalFinanceEvents(){
+  document.querySelectorAll('.tab').forEach(tab=>{
+    if(tab.dataset.gtab){
+      tab.addEventListener('click', ()=>{
+        state.globalSubTab = tab.dataset.gtab;
+        render();
+      });
+    }
+  });
+
+  const monthSel = document.getElementById('f-global-month');
+  if(monthSel) monthSel.addEventListener('change', ()=>{
+    state.globalFinanceMonth = monthSel.value;
+    render();
+  });
+
+  const monthlyFilterSel = document.getElementById('f-monthly-filter');
+  if(monthlyFilterSel) monthlyFilterSel.addEventListener('change', ()=>{
+    state.globalMonthlyFilter = monthlyFilterSel.value;
+    render();
+  });
+
+  const marginDetailsChk = document.getElementById('f-margin-details');
+  if(marginDetailsChk) marginDetailsChk.addEventListener('change', ()=>{
+    state.marginShowDetails = marginDetailsChk.checked;
+    render();
+  });
+
+  document.querySelectorAll('.btn-save-tjm').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const name = decodeURIComponent(btn.dataset.name);
+      const input = document.querySelector(`.f-inline-tjm[data-name="${btn.dataset.name}"]`);
+      const tjmCout = parseFloat((input.value||'0').replace(',','.')) || 0;
+      let fl = state.freelancers.find(f=>f.name===name);
+      if(!fl){
+        fl = {id:uid(), name, specialite:'', tjmCout:0, type:'externe'};
+        state.freelancers.push(fl);
+      }
+      fl.tjmCout = tjmCout;
+      await saveData();
+      render();
+    });
+  });
+
+  const clearAllBtn = document.getElementById('btn-clear-all-projects');
+  if(clearAllBtn) clearAllBtn.addEventListener('click', ()=>{
+    const totalEntries = state.projects.reduce((s,p)=> s + (p.timeEntries||[]).length, 0);
+    if(!totalEntries){ showAlert('Aucune saisie de temps à effacer.'); return; }
+    showConfirm(`Effacer les saisies de temps de TOUS les projets (${totalEntries} au total) ? Les paramètres des projets (TJM, échéances, notes, etc.) ne seront pas touchés.`, async ()=>{
+      state.projects.forEach(p=>{ p.timeEntries = []; });
+      state.financeMonth = null;
+      state.globalFinanceMonth = null;
+      await saveData();
+      render();
+    });
+  });
+
+  const lf1 = document.getElementById('f-lines-month');
+  if(lf1) lf1.addEventListener('change', ()=>{ state.linesFilterMonth = lf1.value; render(); });
+  const lf2 = document.getElementById('f-lines-project');
+  if(lf2) lf2.addEventListener('change', ()=>{ state.linesFilterProject = lf2.value; render(); });
+  const lf3 = document.getElementById('f-lines-freelancer');
+  if(lf3) lf3.addEventListener('change', ()=>{ state.linesFilterFreelancer = lf3.value; render(); });
+
+  const lfGroup = document.getElementById('f-lines-groupby');
+  if(lfGroup) lfGroup.addEventListener('change', ()=>{ state.linesGroupBy = lfGroup.value; render(); });
+
+  const deleteFilteredBtn = document.getElementById('btn-delete-filtered');
+  if(deleteFilteredBtn) deleteFilteredBtn.addEventListener('click', ()=>{
+    const {filtered} = getFilteredEntries();
+    if(!filtered.length) return;
+    showConfirm(`Supprimer ces ${filtered.length} ligne(s) de temps ? Cette action ne touche que les saisies affichées avec les filtres actuels.`, async ()=>{
+      const byProject = {};
+      filtered.forEach(e=>{
+        if(!byProject[e.projectId]) byProject[e.projectId] = new Set();
+        byProject[e.projectId].add(e.entryId);
+      });
+      Object.keys(byProject).forEach(projectId=>{
+        const p = state.projects.find(pr=>pr.id===projectId);
+        if(p){ p.timeEntries = (p.timeEntries||[]).filter(e=> !byProject[projectId].has(e.id)); }
+      });
+      await saveData();
+      render();
+    });
+  });
+
+  document.querySelectorAll('.btn-edit-line').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      modal = {type:'editEntry', data:{projectId:btn.dataset.project, entryId:btn.dataset.entry}};
+      render();
+    });
+  });
+
+  document.querySelectorAll('.btn-delete-line').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const projectId = btn.dataset.project;
+      const entryId = btn.dataset.entry;
+      showConfirm('Supprimer cette ligne de temps ?', async ()=>{
+        const p = state.projects.find(pr=>pr.id===projectId);
+        if(p){ p.timeEntries = (p.timeEntries||[]).filter(e=>e.id!==entryId); }
+        await saveData();
+        render();
+      });
+    });
+  });
+
+  document.querySelectorAll('.btn-delete-group').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = decodeURIComponent(btn.dataset.key);
+      const {filtered} = getFilteredEntries();
+      const groups = groupFilteredEntries(filtered, state.linesGroupBy);
+      const group = groups.find(g=> g.key.toString()===key);
+      if(!group) return;
+      showConfirm(`Supprimer les ${group.count} ligne(s) de "${group.label}" ?`, async ()=>{
+        const byProject = {};
+        group.items.forEach(it=>{
+          if(!byProject[it.projectId]) byProject[it.projectId] = new Set();
+          byProject[it.projectId].add(it.entryId);
+        });
+        Object.keys(byProject).forEach(projectId=>{
+          const p = state.projects.find(pr=>pr.id===projectId);
+          if(p){ p.timeEntries = (p.timeEntries||[]).filter(e=> !byProject[projectId].has(e.id)); }
+        });
+        await saveData();
+        render();
+      });
+    });
+  });
+}
+
+function attachSidebarEvents(){
+  document.querySelectorAll('.project-card[data-id]').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      state.selectedId = card.dataset.id;
+      state.viewMode = 'project';
+      state.financeMonth = null;
+      render();
+    });
+  });
+  const navGlobal = document.getElementById('nav-global-finance');
+  if(navGlobal) navGlobal.addEventListener('click', ()=>{
+    state.viewMode = 'globalFinance';
+    render();
+  });
+  const addBtn = document.getElementById('btn-add-project');
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    modal = {type:'project', data:null};
+    render();
+  });
+  const importGlobalBtn = document.getElementById('btn-import-global');
+  if(importGlobalBtn) importGlobalBtn.addEventListener('click', ()=>{
+    modal = {type:'importGlobal', data:null};
+    render();
+  });
+
+  const exportBtn = document.getElementById('btn-export-backup');
+  if(exportBtn) exportBtn.addEventListener('click', ()=>{
+    exportAllData();
+  });
+
+  const importBackupBtn = document.getElementById('btn-import-backup');
+  const importBackupFile = document.getElementById('f-import-backup-file');
+  if(importBackupBtn && importBackupFile){
+    importBackupBtn.addEventListener('click', ()=>{
+      importBackupFile.click();
+    });
+    importBackupFile.addEventListener('change', ()=>{
+      const file = importBackupFile.files[0];
+      if(!file) return;
+      showConfirm(`Importer cette sauvegarde va REMPLACER toutes les données actuelles (projets, collaborateurs, historique d'import) par celles du fichier "${file.name}". Continuer ?`, async ()=>{
+        await importAllDataFromFile(file);
+      });
+      importBackupFile.value = '';
+    });
+  }
+
+  const searchInput = document.getElementById('f-sidebar-search');
+  if(searchInput){
+    searchInput.addEventListener('input', ()=>{
+      const cursorPos = searchInput.selectionStart;
+      state.sidebarSearch = searchInput.value;
+      state.sidebarVisibleCount = 15;
+      render();
+      const newInput = document.getElementById('f-sidebar-search');
+      if(newInput){
+        newInput.focus();
+        newInput.setSelectionRange(cursorPos, cursorPos);
+      }
+    });
+  }
+
+  const showMoreBtn = document.getElementById('btn-show-more-projects');
+  if(showMoreBtn) showMoreBtn.addEventListener('click', ()=>{
+    state.sidebarVisibleCount += 15;
+    render();
+  });
+}
+
+function attachMainPanelEvents(){
+  const editBtn = document.getElementById('btn-edit-project');
+  if(editBtn) editBtn.addEventListener('click', ()=>{
+    const p = state.projects.find(pr=>pr.id===state.selectedId);
+    modal = {type:'project', data:p};
+    render();
+  });
+  const delBtn = document.getElementById('btn-delete-project');
+  if(delBtn) delBtn.addEventListener('click', ()=>{
+    const p = state.projects.find(pr=>pr.id===state.selectedId);
+    showConfirm(`Supprimer définitivement le projet "${p.client}" et toutes ses saisies de temps ?`, async ()=>{
+      state.projects = state.projects.filter(pr=>pr.id!==state.selectedId);
+      state.selectedId = state.projects.length ? state.projects[0].id : null;
+      await saveData();
+      render();
+    });
+  });
+
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      if(tab.dataset.tab){ state.activeTab = tab.dataset.tab; }
+      else if(tab.dataset.fview){ state.financeViewMode = tab.dataset.fview; }
+      render();
+    });
+  });
+
+  document.querySelectorAll('.pipeline-seg').forEach(seg=>{
+    seg.addEventListener('click', async ()=>{
+      const p = state.projects.find(pr=>pr.id===state.selectedId);
+      p.stage = parseInt(seg.dataset.stage);
+      p.lastUpdate = new Date().toISOString().slice(0,10);
+      await saveData();
+      render();
+    });
+  });
+  document.querySelectorAll('.health-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const p = state.projects.find(pr=>pr.id===state.selectedId);
+      p.health = btn.dataset.health;
+      p.lastUpdate = new Date().toISOString().slice(0,10);
+      await saveData();
+      render();
+    });
+  });
+  const sumBtn = document.getElementById('btn-generate-summary');
+  if(sumBtn) sumBtn.addEventListener('click', ()=>{
+    modal = {type:'summary', data:null, loading:true};
+    render();
+    generateSummary();
+  });
+
+  const monthSel = document.getElementById('f-finance-month');
+  if(monthSel) monthSel.addEventListener('change', ()=>{
+    state.financeMonth = monthSel.value;
+    render();
+  });
+
+  const periodModeSel = document.getElementById('f-period-mode');
+  if(periodModeSel) periodModeSel.addEventListener('change', ()=>{
+    state.periodMode = periodModeSel.value;
+    if(state.periodMode==='plage'){
+      state.periodFrom = state.periodFrom || state.financeMonth || CURRENT_MONTH;
+      state.periodTo = state.periodTo || state.financeMonth || CURRENT_MONTH;
+    }
+    render();
+  });
+
+  const periodFromInput = document.getElementById('f-period-from');
+  if(periodFromInput) periodFromInput.addEventListener('change', ()=>{
+    state.periodFrom = periodFromInput.value;
+    render();
+  });
+
+  const periodToInput = document.getElementById('f-period-to');
+  if(periodToInput) periodToInput.addEventListener('change', ()=>{
+    state.periodTo = periodToInput.value;
+    render();
+  });
+
+  const feelSlider = document.getElementById('f-avancement-feeling');
+  if(feelSlider) feelSlider.addEventListener('change', async ()=>{
+    const p = state.projects.find(pr=>pr.id===state.selectedId);
+    p.avancementFeeling = parseInt(feelSlider.value);
+    await saveData();
+    render();
+  });
+
+  document.querySelectorAll('.btn-save-coef').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const name = decodeURIComponent(btn.dataset.name);
+      const input = document.querySelector(`.f-coef-value[data-name="${btn.dataset.name}"]`);
+      const value = parseFloat((input.value||'1').replace(',','.')) || 1;
+      const p = state.projects.find(pr=>pr.id===state.selectedId);
+      setCoefficient(p, name, state.financeMonth, value);
+      await saveData();
+      render();
+    });
+  });
+
+  const saveForfaitBtn = document.getElementById('btn-save-forfait');
+  if(saveForfaitBtn) saveForfaitBtn.addEventListener('click', async ()=>{
+    const input = document.getElementById('f-forfait-value');
+    const value = parseFloat((input.value||'0').replace(',','.')) || 0;
+    const p = state.projects.find(pr=>pr.id===state.selectedId);
+    setForfaitMensuel(p, state.financeMonth, value);
+    await saveData();
+    render();
+  });
+
+  const importBtn = document.getElementById('btn-import-odoo');
+  if(importBtn) importBtn.addEventListener('click', ()=>{
+    modal = {type:'import', data:null};
+    render();
+  });
+
+  const addEntryBtn = document.getElementById('btn-add-entry');
+  if(addEntryBtn) addEntryBtn.addEventListener('click', ()=>{
+    modal = {type:'addEntry', data:null};
+    render();
+  });
+
+  const clearBtn = document.getElementById('btn-clear-entries');
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{
+    showConfirm('Vider toutes les saisies de temps de ce projet ?', async ()=>{
+      const p = state.projects.find(pr=>pr.id===state.selectedId);
+      p.timeEntries = [];
+      state.financeMonth = null;
+      await saveData();
+      render();
+    });
+  });
+
+  const clearPeriodBtn = document.getElementById('btn-clear-period');
+  if(clearPeriodBtn) clearPeriodBtn.addEventListener('click', ()=>{
+    const p = state.projects.find(pr=>pr.id===state.selectedId);
+    const rangeFrom = state.periodMode==='mois' ? state.financeMonth : state.periodFrom;
+    const rangeTo = state.periodMode==='mois' ? state.financeMonth : state.periodTo;
+    const toRemove = (p.timeEntries||[]).filter(e=> e.month>=rangeFrom && e.month<=rangeTo).length;
+    if(!toRemove){ showAlert('Aucune saisie sur cette période.'); return; }
+    showConfirm(`Effacer ${toRemove} saisie(s) entre ${rangeFrom} et ${rangeTo} ? Vous pourrez ensuite réimporter le fichier corrigé pour cette période.`, async ()=>{
+      p.timeEntries = (p.timeEntries||[]).filter(e=> !(e.month>=rangeFrom && e.month<=rangeTo));
+      await saveData();
+      render();
+    });
+  });
+}
+
+function attachFreelancerEvents(){
+  const addBtn = document.getElementById('btn-add-freelancer');
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    modal = {type:'freelancer', data:null};
+    render();
+  });
+  document.querySelectorAll('.freelancer-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const f = state.freelancers.find(fr=>fr.id===chip.dataset.id);
+      modal = {type:'freelancer', data:f};
+      render();
+    });
+  });
+}
+
+function cleanEmployeeName(raw){
+  return (raw||'').toString().replace(/^\[E\]\s*/,'').replace(/\s*\(User\)$/,'').trim();
+}
+
+function decodeExcelDate(dateVal){
+  if(typeof dateVal === 'number' && isFinite(dateVal)){
+    try{
+      const dec = XLSX.SSF.parse_date_code(dateVal);
+      if(dec) return {y:dec.y, m:dec.m, d:dec.d};
+    }catch(e){ /* fall through */ }
+    return null;
+  }
+  if(dateVal instanceof Date && !isNaN(dateVal)){
+    return {y:dateVal.getUTCFullYear(), m:dateVal.getUTCMonth()+1, d:dateVal.getUTCDate()};
+  }
+  if(typeof dateVal === 'string'){
+    const m1 = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m1) return {y:parseInt(m1[1]), m:parseInt(m1[2]), d:parseInt(m1[3])};
+    const m2 = dateVal.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m2) return {y:parseInt(m2[3]), m:parseInt(m2[2]), d:parseInt(m2[1])};
+  }
+  return null;
+}
+
+function dateToMonth(dateVal){
+  const dec = decodeExcelDate(dateVal);
+  if(!dec) return null;
+  return `${dec.y}-${String(dec.m).padStart(2,'0')}`;
+}
+
+function buildFallbackSourceId(row){
+  const dec = decodeExcelDate(row['Date']);
+  const dateKey = dec ? `${dec.y}-${String(dec.m).padStart(2,'0')}-${String(dec.d).padStart(2,'0')}` : (row['Date']||'').toString();
+  const parts = [
+    dateKey,
+    (row['Employé']||'').toString().trim(),
+    (row['Projet']||'').toString().trim(),
+    (row['Tâche']||'').toString().trim(),
+    (row["Ticket d'assistance"]||'').toString().trim(),
+    (row['Description']||'').toString().trim(),
+    (row['Quantité']||'').toString().trim()
+  ];
+  return 'fb:' + parts.join('|');
+}
+
+function rowMatchesKeyword(row, keyword){
+  const kw = (keyword||'').trim().toLowerCase();
+  if(!kw) return true;
+  const text = ((row['Tâche']||'') + ' ' + (row["Ticket d'assistance"]||'') + ' ' + (row['Description']||'')).toString().toLowerCase();
+  return text.includes(kw);
+}
+
+function recordKnownOdooProjectNames(rows){
+  const set = new Set(state.knownOdooProjectNames || []);
+  rows.forEach(r=>{
+    const v = (r['Projet']||'').toString().trim();
+    if(v) set.add(v);
+  });
+  state.knownOdooProjectNames = Array.from(set).sort();
+}
+
+function getOdooFragments(project){
+  return (project.odooProjectName||'').split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean);
+}
+
+function projectMatchesRow(project, row){
+  const projet = (row['Projet']||'').toString().trim().toLowerCase();
+  const fragments = getOdooFragments(project);
+  if(!fragments.length || !fragments.some(f=> projet.includes(f))) return false;
+  if(project.odooTaskKeyword){
+    return rowMatchesKeyword(row, project.odooTaskKeyword);
+  }
+  const siblingsWithKeyword = state.projects.filter(p2=> p2.id!==project.id && p2.odooTaskKeyword);
+  for(const sib of siblingsWithKeyword){
+    const sibFragments = getOdooFragments(sib);
+    if(sibFragments.some(f=> projet.includes(f)) && rowMatchesKeyword(row, sib.odooTaskKeyword)) return false;
+  }
+  return true;
+}
+
+function decodeExcelDateToISO(dateVal){
+  const dec = decodeExcelDate(dateVal);
+  if(!dec) return null;
+  return `${dec.y}-${String(dec.m).padStart(2,'0')}-${String(dec.d).padStart(2,'0')}`;
+}
+
+function processOdooRows(rows, project){
+  const newEntries = [];
+  const freelancerTypes = {};
+  let skippedDup = 0, skippedProject = 0, skippedInvalid = 0;
+  const rowSourceIds = new Set();
+  rows.forEach(row=>{
+    const rawIdEarly = (row['ID']||'').toString().trim();
+    const sourceIdEarly = rawIdEarly || buildFallbackSourceId(row);
+    rowSourceIds.add(sourceIdEarly);
+    if(!projectMatchesRow(project, row)){ skippedProject++; return; }
+    const rawEmp = (row['Employé']||'').toString();
+    const isExternal = /^\[E\]/.test(rawEmp.trim());
+    const emp = cleanEmployeeName(rawEmp);
+    if(emp) freelancerTypes[emp] = isExternal ? 'externe' : 'interne';
+    const sourceId = sourceIdEarly;
+    if((project.timeEntries||[]).some(e=>e.sourceId===sourceId)){ skippedDup++; return; }
+    const month = dateToMonth(row['Date']);
+    const exactDate = decodeExcelDateToISO(row['Date']);
+    const heures = parseFloat(row['Quantité']);
+    if(!month || !emp || isNaN(heures) || heures<=0){ skippedInvalid++; return; }
+    newEntries.push({id:uid(), sourceId, freelancer:emp, heures, month, date:exactDate});
+  });
+
+  const reclassifiedEntryIds = [];
+  (project.timeEntries||[]).forEach(e=>{
+    if(!e.sourceId || !rowSourceIds.has(e.sourceId)) return;
+    const matchingRow = rows.find(r=>{
+      const rid = (r['ID']||'').toString().trim();
+      return (rid || buildFallbackSourceId(r)) === e.sourceId;
+    });
+    if(matchingRow && !projectMatchesRow(project, matchingRow)){
+      reclassifiedEntryIds.push(e.id);
+    }
+  });
+
+  return {newEntries, skippedDup, skippedProject, skippedInvalid, freelancerTypes, reclassifiedEntryIds};
+}
+
+function projectNameAlreadyMatched(name){
+  const nameLower = name.trim().toLowerCase();
+  return state.projects.some(p=> getOdooFragments(p).some(f=> nameLower.includes(f)));
+}
+
+function cleanOdooProjectLabel(name){
+  return name.replace(/^\*\*\s*/,'').replace(/\s*\*\*$/,'').replace(/^\[[^\]]+\]\s*/,'').trim();
+}
+
+function defaultDeadlinePlus(days){
+  const d = new Date(TODAY);
+  d.setDate(d.getDate()+days);
+  return d.toISOString().slice(0,10);
+}
+
+function createProjectFromOdooName(odooName, clientLabelOverride){
+  const cleaned = clientLabelOverride || cleanOdooProjectLabel(odooName) || odooName;
+  const newP = {
+    id: uid(), client: cleaned, ref: 'ODO-'+Math.floor(Math.random()*900+100),
+    stage:0, health:'ok', freelancers:[],
+    deadline: defaultDeadlinePlus(30),
+    lastUpdate: new Date().toISOString().slice(0,10),
+    notes:'',
+    tjmVendu:0, vendu:0, pctProdRisque:0, factureCumulee:0,
+    odooProjectName: odooName, odooTaskKeyword:'', driveLink:'',
+    useCoef:false, coefficients:{}, billingType:'forfaitProjet', inheritFrom:'', forfaits:{}, budgetAnnuelJours:0,
+    avancementFeeling:0, timeEntries:[]
+  };
+  state.projects.push(newP);
+  return newP;
+}
+
+function computeUnmatchedCount(rows){
+  let unmatched = 0;
+  rows.forEach(row=>{
+    const projet = (row['Projet']||'').toString().trim().toLowerCase();
+    if(!projet){ return; }
+    const matchesAny = state.projects.some(p=> getOdooFragments(p).some(f=> projet.includes(f)));
+    if(!matchesAny) unmatched++;
+  });
+  return unmatched;
+}
+
+function importGlobalRows(rows){
+  const report = [];
+  state.projects.forEach(p=>{
+    if(!p.odooProjectName){
+      report.push({client:p.client, ref:p.ref, imported:0, noConfig:true});
+      return;
+    }
+    const {newEntries, skippedDup, skippedInvalid, freelancerTypes, reclassifiedEntryIds} = processOdooRows(rows, p);
+    newEntries.forEach(e=>{
+      if(!state.freelancers.find(f=>f.name===e.freelancer)){
+        const type = freelancerTypes[e.freelancer] || 'externe';
+        state.freelancers.push({id:uid(), name:e.freelancer, specialite:'', tjmCout:0, type});
+      }
+    });
+    if(reclassifiedEntryIds.length){
+      p.timeEntries = (p.timeEntries||[]).filter(e=> !reclassifiedEntryIds.includes(e.id));
+    }
+    p.timeEntries = (p.timeEntries||[]).concat(newEntries);
+    report.push({client:p.client, ref:p.ref, imported:newEntries.length, skippedDup, skippedInvalid, reclassified:reclassifiedEntryIds.length});
+  });
+  return report;
+}
+
+function parseOdooImport(text){
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  let entries = [];
+  let skipped = 0;
+  lines.forEach(line=>{
+    let sep = '\t';
+    if(line.indexOf('\t')===-1){
+      sep = line.indexOf(';')!==-1 ? ';' : ',';
+    }
+    const parts = line.split(sep).map(s=>s.trim());
+    if(parts.length < 3){ skipped++; return; }
+    const name = parts[0];
+    const heuresRaw = parts[1].replace(',', '.');
+    const heures = parseFloat(heuresRaw);
+    let mois = parts[2];
+    if(!/^\d{4}-\d{2}$/.test(mois)){
+      const altMY = mois.match(/^(\d{2})\/(\d{4})$/);
+      const altDMY = mois.match(/^\d{1,2}\/(\d{2})\/(\d{4})$/);
+      if(altMY) mois = `${altMY[2]}-${altMY[1]}`;
+      else if(altDMY) mois = `${altDMY[2]}-${altDMY[1]}`;
+    }
+    if(isNaN(heures) || !/^\d{4}-\d{2}$/.test(mois) || !name){ skipped++; return; }
+    entries.push({id: uid(), freelancer:name, heures, month:mois});
+  });
+  return {entries, skipped};
+}
+
+function renderFreelancerTjmRows(p){
+  if(!p) return '';
+  const names = Array.from(new Set((p.timeEntries||[]).map(e=>e.freelancer)));
+  if(!names.length) return '';
+  const rows = names.map(name=>{
+    const f = state.freelancers.find(fl=>fl.name===name) || {tjmCout:0, type:'externe'};
+    const nameKey = encodeURIComponent(name);
+    return `
+      <div class="freelancer-tjm-row">
+        <div class="fname">${name}</div>
+        <select class="f-tjm-type" data-name="${nameKey}">
+          <option value="externe" ${f.type!=='interne'?'selected':''}>Externe</option>
+          <option value="interne" ${f.type==='interne'?'selected':''}>Interne</option>
+        </select>
+        <input type="text" class="f-tjm-cout" data-name="${nameKey}" value="${f.tjmCout||''}" placeholder="TJM €/j">
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="section-label" style="margin-top:16px;">Indépendants ayant du temps sur ce projet</div>
+    <div class="import-hint" style="margin-top:0;margin-bottom:8px;">Type et TJM détectés depuis les imports Odoo (préfixe "[E]" = externe). Modifiez-les ici si besoin.</div>
+    ${rows}
+  `;
+}
+
+function autoFetchFromLastImport(project){
+  if(!state.allImportedRows || !state.allImportedRows.length || !project.odooProjectName) return {imported:0, reclassified:0};
+  const {newEntries, freelancerTypes, reclassifiedEntryIds} = processOdooRows(state.allImportedRows, project);
+  newEntries.forEach(e=>{
+    if(!state.freelancers.find(f=>f.name===e.freelancer)){
+      const type = freelancerTypes[e.freelancer] || 'externe';
+      state.freelancers.push({id:uid(), name:e.freelancer, specialite:'', tjmCout:0, type});
+    }
+  });
+  if(reclassifiedEntryIds && reclassifiedEntryIds.length){
+    project.timeEntries = (project.timeEntries||[]).filter(e=> !reclassifiedEntryIds.includes(e.id));
+  }
+  project.timeEntries = (project.timeEntries||[]).concat(newEntries);
+  return {imported:newEntries.length, reclassified:(reclassifiedEntryIds||[]).length};
+}
+
+function renderModal(){
+  const existingOverlay = document.getElementById('modal-overlay');
+  if(existingOverlay) existingOverlay.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-overlay';
+
+  if(modal.type === 'project'){
+    const p = modal.data;
+    overlay.innerHTML = `
+      <div class="modal">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>${p ? 'Modifier le projet' : 'Nouveau projet'}</h3>
+        <label>Client</label>
+        <input type="text" id="f-client" value="${p ? p.client : ''}" placeholder="Nom du client">
+        <label>Référence</label>
+        <input type="text" id="f-ref" value="${p ? p.ref : ''}" placeholder="ODO-0XX">
+        <label>Échéance</label>
+        <input type="date" id="f-deadline" value="${p ? p.deadline : ''}">
+        <label>Indépendants assignés (séparés par des virgules)</label>
+        <input type="text" id="f-freelancers" value="${p ? p.freelancers.join(', ') : ''}" placeholder="Sami K., Léa M.">
+        <label>Lien Drive du projet</label>
+        <input type="text" id="f-drivelink" value="${p ? (p.driveLink||'') : ''}" placeholder="https://drive.google.com/drive/folders/...">
+        <label>Notes / blocages</label>
+        <textarea id="f-notes">${p ? p.notes : ''}</textarea>
+
+        <div class="section-label" style="margin-top:18px;">Temps &amp; rentabilité</div>
+        <label>Type de facturation</label>
+        <select id="f-billingtype">
+          <option value="regie" ${p && p.billingType==='regie' ? 'selected':''}>Régie (jours consommés, sans budget)</option>
+          <option value="budgetAnnuel" ${p && p.billingType==='budgetAnnuel' ? 'selected':''}>Budget annuel alloué</option>
+          <option value="forfaitProjet" ${!p || p.billingType==='forfaitProjet' ? 'selected':''}>Forfait projet (jours vendus)</option>
+          <option value="maintenance" ${p && p.billingType==='maintenance' ? 'selected':''}>Support &amp; maintenance (forfait mensuel)</option>
+        </select>
+        <label>Hériter du TJM vendu et des coefficients d'un autre projet</label>
+        <select id="f-inheritfrom">
+          <option value="">Aucun (utiliser les valeurs propres à ce projet)</option>
+          ${state.projects.filter(pr=> !p || pr.id!==p.id).map(pr=>`<option value="${pr.id}" ${p && p.inheritFrom===pr.id ? 'selected':''}>${pr.client}</option>`).join('')}
+        </select>
+        <div class="field-row" id="f-budgetannuel-row" style="${p && p.billingType==='budgetAnnuel' ? '' : 'display:none;'}">
+          <div>
+            <label>Budget annuel alloué (jours)</label>
+            <input type="text" id="f-budgetannuel" value="${p ? (p.budgetAnnuelJours||'') : ''}" placeholder="60">
+          </div>
+        </div>
+        <label>Nom du/des projet(s) dans Odoo (sélectionnez dans la liste, pas de saisie libre)</label>
+        <select id="f-odooproject-select" multiple style="min-height:110px;">
+          ${state.knownOdooProjectNames.length ? state.knownOdooProjectNames.map(n=>{
+              const sel = p ? getOdooFragments(p).includes(n.trim().toLowerCase()) : false;
+              return `<option value="${n.replace(/"/g,'&quot;')}" ${sel?'selected':''}>${n}</option>`;
+            }).join('') : `<option disabled>Aucun projet Odoo connu pour l'instant — importez un premier fichier</option>`}
+        </select>
+        <div class="import-hint" style="margin-top:4px;">Ctrl/Cmd + clic pour sélectionner plusieurs projets. Cette liste se remplit automatiquement à chaque import de fichier Excel.</div>
+        <label>Ajouter un nom manuellement (rare, si jamais importé)</label>
+        <input type="text" id="f-odooproject-custom" placeholder="ex : Nom exact pas encore vu dans un import">
+        <label>Mot-clé Tâche / Description / Ticket (optionnel — isole un sous-projet)</label>
+        <input type="text" id="f-odootaskkeyword" value="${p ? (p.odooTaskKeyword||'') : ''}" placeholder="ex : Marius">
+        <div class="import-hint" style="margin-top:4px;">Si renseigné, seules les lignes Odoo dont la tâche, le ticket ou la description contient ce mot seront rattachées ici (le reste va au(x) projet(s) général(aux), sans doublon).</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+          <input type="checkbox" id="f-usecoef" ${p && p.useCoef ? 'checked' : ''} style="width:auto;">
+          <span>Facturation par coefficient d'heures (par consultant, par mois)</span>
+        </label>
+        ${renderFreelancerTjmRows(p)}
+        <div class="field-row">
+          <div>
+            <label>TJM vendu au client (€/j)</label>
+            <input type="text" id="f-tjmvendu" value="${p ? (p.tjmVendu||'') : ''}" placeholder="895">
+          </div>
+          <div>
+            <label>Montant vendu total (€)</label>
+            <input type="text" id="f-vendu" value="${p ? (p.vendu||'') : ''}" placeholder="32267">
+          </div>
+        </div>
+        <div class="field-row">
+          <div>
+            <label>% prod (vs marge risque)</label>
+            <input type="text" id="f-pctprod" value="${p ? (p.pctProdRisque||'') : ''}" placeholder="70">
+          </div>
+          <div>
+            <label>Facturé cumulé à ce jour (€)</label>
+            <input type="text" id="f-facturecum" value="${p ? (p.factureCumulee||'') : ''}" placeholder="8066.75">
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-save">Enregistrer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    const billingTypeSel = document.getElementById('f-billingtype');
+    if(billingTypeSel) billingTypeSel.addEventListener('change', ()=>{
+      const row = document.getElementById('f-budgetannuel-row');
+      if(row) row.style.display = (billingTypeSel.value==='budgetAnnuel') ? '' : 'none';
+    });
+    document.getElementById('modal-save').onclick = async ()=>{
+      const client = document.getElementById('f-client').value.trim();
+      const ref = document.getElementById('f-ref').value.trim();
+      const deadline = document.getElementById('f-deadline').value;
+      const freelancersRaw = document.getElementById('f-freelancers').value;
+      const notes = document.getElementById('f-notes').value;
+      const tjmVendu = parseFloat(document.getElementById('f-tjmvendu').value.replace(',','.')) || 0;
+      const vendu = parseFloat(document.getElementById('f-vendu').value.replace(',','.')) || 0;
+      const pctProdRisque = parseFloat(document.getElementById('f-pctprod').value.replace(',','.')) || 0;
+      const factureCumulee = parseFloat(document.getElementById('f-facturecum').value.replace(',','.')) || 0;
+      const selectedOdooNames = Array.from(document.getElementById('f-odooproject-select').selectedOptions).map(o=>o.value);
+      const customOdooNames = document.getElementById('f-odooproject-custom').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const odooProjectName = [...selectedOdooNames, ...customOdooNames].join(', ');
+      const odooTaskKeyword = document.getElementById('f-odootaskkeyword').value.trim();
+      const driveLink = document.getElementById('f-drivelink').value.trim();
+      const useCoef = document.getElementById('f-usecoef').checked;
+      const billingType = document.getElementById('f-billingtype').value;
+      const inheritFrom = document.getElementById('f-inheritfrom').value;
+      const budgetAnnuelJours = parseFloat(document.getElementById('f-budgetannuel').value.replace(',','.')) || 0;
+      if(!client){ showAlert('Le nom du client est requis.'); return; }
+      const freelancersList = freelancersRaw.split(',').map(s=>s.trim()).filter(Boolean);
+
+      document.querySelectorAll('.f-tjm-type').forEach(sel=>{
+        const name = decodeURIComponent(sel.dataset.name);
+        const tjmInput = document.querySelector(`.f-tjm-cout[data-name="${sel.dataset.name}"]`);
+        const type = sel.value;
+        const tjmCout = parseFloat((tjmInput ? tjmInput.value : '0').replace(',','.')) || 0;
+        let fl = state.freelancers.find(f=>f.name===name);
+        if(!fl){
+          fl = {id:uid(), name, specialite:'', tjmCout:0, type:'externe'};
+          state.freelancers.push(fl);
+        }
+        fl.type = type;
+        fl.tjmCout = tjmCout;
+      });
+
+      if(p){
+        p.client = client; p.ref = ref; p.deadline = deadline;
+        p.freelancers = freelancersList; p.notes = notes;
+        p.tjmVendu = tjmVendu; p.vendu = vendu; p.pctProdRisque = pctProdRisque; p.factureCumulee = factureCumulee;
+        p.odooProjectName = odooProjectName;
+        p.odooTaskKeyword = odooTaskKeyword;
+        p.driveLink = driveLink;
+        p.useCoef = useCoef;
+        p.billingType = billingType;
+        p.inheritFrom = inheritFrom;
+        p.budgetAnnuelJours = budgetAnnuelJours;
+        p.lastUpdate = new Date().toISOString().slice(0,10);
+        var finalProject = p;
+      } else {
+        const newP = {
+          id: uid(), client, ref: ref || ('ODO-'+Math.floor(Math.random()*900+100)),
+          stage:0, health:'ok', freelancers:freelancersList,
+          deadline: deadline || new Date().toISOString().slice(0,10),
+          lastUpdate: new Date().toISOString().slice(0,10),
+          notes,
+          tjmVendu, vendu, pctProdRisque, factureCumulee, odooProjectName, odooTaskKeyword, driveLink,
+          useCoef, coefficients:{}, billingType, inheritFrom, budgetAnnuelJours, forfaits:{},
+          avancementFeeling:0, timeEntries:[]
+        };
+        state.projects.push(newP);
+        state.selectedId = newP.id;
+        var finalProject = newP;
+      }
+      const autoResult = autoFetchFromLastImport(finalProject);
+      await saveData();
+      closeModal();
+      render();
+      if(autoResult.imported || autoResult.reclassified){
+        let msg = `${autoResult.imported} ligne(s) trouvée(s) automatiquement dans le dernier fichier importé pour ce projet.`;
+        if(autoResult.reclassified) msg += ` ${autoResult.reclassified} ligne(s) reclassée(s) depuis un autre projet.`;
+        showAlert(msg);
+      }
+    };
+  }
+
+  if(modal.type === 'freelancer'){
+    const f = modal.data;
+    const suggestion = f ? computeSuggestedTjm(f.salaireMensuel, f.heuresPresenceSemaine) : null;
+    overlay.innerHTML = `
+      <div class="modal">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>${f ? 'Modifier un collaborateur' : 'Ajouter un collaborateur'}</h3>
+        <label>Nom</label>
+        <input type="text" id="f-name" value="${f ? f.name : ''}" placeholder="Prénom N.">
+        <label>Spécialité</label>
+        <input type="text" id="f-spec" value="${f ? (f.specialite||'') : ''}" placeholder="Dev Python / Odoo">
+        <div class="field-row">
+          <div>
+            <label>TJM coût (€/j)</label>
+            <input type="text" id="f-tjmcout" value="${f ? (f.tjmCout||'') : ''}" placeholder="500">
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="f-type">
+              <option value="externe" ${f && f.type==='externe' ? 'selected':''}>Externe (sous-traitant)</option>
+              <option value="interne" ${f && f.type==='interne' ? 'selected':''}>Interne / salarié</option>
+            </select>
+          </div>
+        </div>
+        <div class="section-label" style="margin-top:16px;">Pour un salarié : calculer un TJM coût à partir du salaire</div>
+        <div class="field-row">
+          <div>
+            <label>Salaire mensuel tout inclus (€)</label>
+            <input type="text" id="f-salaire" value="${f ? (f.salaireMensuel||'') : ''}" placeholder="2250">
+          </div>
+          <div>
+            <label>Heures de présence / semaine</label>
+            <input type="text" id="f-presence" value="${f ? (f.heuresPresenceSemaine||'') : ''}" placeholder="17.5">
+          </div>
+        </div>
+        <div class="import-hint" id="f-tjm-suggestion" style="margin-top:4px;">${suggestion ? `TJM coût suggéré : ${formatEUR(suggestion)}/j (base 7h = 1 jour)` : 'Renseignez le salaire et les heures de présence pour obtenir une suggestion.'}</div>
+        <button class="btn btn-small" id="btn-apply-suggested-tjm" type="button" style="margin-top:6px;" ${suggestion ? '' : 'disabled'}>Utiliser ce TJM suggéré</button>
+        <div class="modal-actions">
+          ${f ? '<button class="btn btn-ghost" id="btn-delete-freelancer" style="margin-right:auto;color:var(--accent-coral);">Supprimer</button>' : ''}
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-save">${f ? 'Enregistrer' : 'Ajouter'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+
+    const deleteBtn = document.getElementById('btn-delete-freelancer');
+    if(deleteBtn) deleteBtn.addEventListener('click', ()=>{
+      const nbEntries = state.projects.reduce((s,p)=> s + (p.timeEntries||[]).filter(e=>e.freelancer===f.name).length, 0);
+      showConfirm(`Supprimer "${f.name}" de la liste des collaborateurs ?${nbEntries ? ` Ses ${nbEntries} saisie(s) de temps existantes resteront dans les projets, mais son profil (TJM, type, salaire) sera perdu.` : ''}`, async ()=>{
+        state.freelancers = state.freelancers.filter(fl=>fl.id!==f.id);
+        await saveData();
+        closeModal();
+        render();
+      });
+    });
+
+    function refreshSuggestion(){
+      const salaire = parseFloat((document.getElementById('f-salaire').value||'0').replace(',','.')) || 0;
+      const presence = parseFloat((document.getElementById('f-presence').value||'0').replace(',','.')) || 0;
+      const sugg = computeSuggestedTjm(salaire, presence);
+      const hint = document.getElementById('f-tjm-suggestion');
+      const btn = document.getElementById('btn-apply-suggested-tjm');
+      if(sugg){
+        hint.textContent = `TJM coût suggéré : ${formatEUR(sugg)}/j (base 7h = 1 jour)`;
+        btn.disabled = false;
+        btn.dataset.value = sugg;
+      } else {
+        hint.textContent = 'Renseignez le salaire et les heures de présence pour obtenir une suggestion.';
+        btn.disabled = true;
+        delete btn.dataset.value;
+      }
+    }
+    document.getElementById('f-salaire').addEventListener('input', refreshSuggestion);
+    document.getElementById('f-presence').addEventListener('input', refreshSuggestion);
+    document.getElementById('btn-apply-suggested-tjm').addEventListener('click', ()=>{
+      const val = document.getElementById('btn-apply-suggested-tjm').dataset.value;
+      if(val) document.getElementById('f-tjmcout').value = parseFloat(val).toFixed(2);
+    });
+
+    document.getElementById('modal-save').onclick = async ()=>{
+      const name = document.getElementById('f-name').value.trim();
+      const specialite = document.getElementById('f-spec').value.trim();
+      const tjmCout = parseFloat(document.getElementById('f-tjmcout').value.replace(',','.')) || 0;
+      const type = document.getElementById('f-type').value;
+      const salaireMensuel = parseFloat(document.getElementById('f-salaire').value.replace(',','.')) || 0;
+      const heuresPresenceSemaine = parseFloat(document.getElementById('f-presence').value.replace(',','.')) || 0;
+      if(!name){ showAlert('Le nom est requis.'); return; }
+      if(f){
+        f.name = name; f.specialite = specialite; f.tjmCout = tjmCout; f.type = type;
+        f.salaireMensuel = salaireMensuel; f.heuresPresenceSemaine = heuresPresenceSemaine;
+      } else {
+        state.freelancers.push({id: uid(), name, specialite, tjmCout, type, salaireMensuel, heuresPresenceSemaine});
+      }
+      await saveData();
+      closeModal();
+      render();
+    };
+  }
+
+  if(modal.type === 'import'){
+    const p = state.projects.find(pr=>pr.id===state.selectedId);
+    const targetLabel = p.odooProjectName ? `"${p.odooProjectName}"` : 'non défini — renseignez-le via "Modifier" sur le projet';
+    overlay.innerHTML = `
+      <div class="modal" style="width:520px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Importer les heures depuis Odoo</h3>
+        <p class="import-hint">Exportez chaque semaine les lignes de <em>Feuilles de temps</em> (Comptes analytiques) depuis Odoo au format Excel, puis importez le fichier ici. Seules les lignes dont le projet Odoo contient ${targetLabel} seront prises en compte. Les lignes déjà importées (même ID) sont ignorées automatiquement. Les employés préfixés <strong>"[E]"</strong> sont détectés comme externes (sous-traitants), les autres comme internes.</p>
+        <label>Fichier Excel (.xlsx)</label>
+        <input type="file" id="f-import-file" accept=".xlsx,.xls">
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary" id="modal-save-file">Importer ce fichier</button>
+        </div>
+        <div style="margin:18px 0 8px;color:var(--text-secondary);font-size:12px;">— ou collez du texte (Nom;Heures;Mois) —</div>
+        <textarea id="f-import-text" placeholder="Sami K.;30.33;2026-07"></textarea>
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn" id="modal-save">Importer le texte</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-save').onclick = async ()=>{
+      const text = document.getElementById('f-import-text').value;
+      const {entries, skipped} = parseOdooImport(text);
+      entries.forEach(e=>{
+        if(!state.freelancers.find(f=>f.name===e.freelancer)){
+          state.freelancers.push({id:uid(), name:e.freelancer, specialite:'', tjmCout:0, type:'externe'});
+        }
+      });
+      p.timeEntries = (p.timeEntries||[]).concat(entries);
+      await saveData();
+      modal = {type:'importResult', data:{imported:entries.length, skipped}};
+      render();
+    };
+    document.getElementById('modal-save-file').onclick = async ()=>{
+      const fileInput = document.getElementById('f-import-file');
+      const file = fileInput.files[0];
+      if(!file){ showAlert('Choisissez d\u2019abord un fichier.'); return; }
+      if(!p.odooProjectName){ showAlert('Indiquez d\u2019abord le nom du projet Odoo correspondant, via "Modifier" sur le projet.'); return; }
+      try{
+        const buf = await file.arrayBuffer();
+        const workbook = XLSX.read(buf, {type:'array'});
+        const sheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
+        recordKnownOdooProjectNames(rows);
+        mergeImportedRows(rows);
+        await saveImportHistory();
+        const {newEntries, skippedDup, skippedProject, skippedInvalid, freelancerTypes, reclassifiedEntryIds} = processOdooRows(rows, p);
+        newEntries.forEach(e=>{
+          if(!state.freelancers.find(f=>f.name===e.freelancer)){
+            const type = freelancerTypes[e.freelancer] || 'externe';
+            state.freelancers.push({id:uid(), name:e.freelancer, specialite:'', tjmCout:0, type});
+          }
+        });
+        if(reclassifiedEntryIds.length){
+          p.timeEntries = (p.timeEntries||[]).filter(e=> !reclassifiedEntryIds.includes(e.id));
+        }
+        p.timeEntries = (p.timeEntries||[]).concat(newEntries);
+        await saveData();
+        modal = {type:'importResult', data:{imported:newEntries.length, skipped:skippedDup, skippedProject, skippedInvalid, reclassified:reclassifiedEntryIds.length}};
+        render();
+      }catch(err){
+        console.error(err);
+        showAlert('Erreur de lecture du fichier : ' + err.message);
+      }
+    };
+  }
+
+  if(modal.type === 'editEntry'){
+    const {projectId, entryId} = modal.data;
+    const p = state.projects.find(pr=>pr.id===projectId);
+    const entry = p ? (p.timeEntries||[]).find(e=>e.id===entryId) : null;
+    if(!p || !entry){
+      overlay.innerHTML = `<div class="modal" style="width:380px;"><span class="close-x" id="modal-close">&times;</span><p>Cette saisie n'existe plus.</p><div class="modal-actions"><button class="btn btn-primary" id="modal-cancel">Fermer</button></div></div>`;
+      document.body.appendChild(overlay);
+      document.getElementById('modal-close').onclick = closeModal;
+      document.getElementById('modal-cancel').onclick = closeModal;
+    } else {
+      const freelancerOptions = state.freelancers.map(f=>`<option value="${f.name}" ${f.name===entry.freelancer?'selected':''}>${f.name}</option>`).join('');
+      const entryDateVal = entry.date || `${entry.month}-01`;
+      overlay.innerHTML = `
+        <div class="modal">
+          <span class="close-x" id="modal-close">&times;</span>
+          <h3>Modifier la saisie de temps</h3>
+          <div class="import-hint" style="margin-top:0;">Projet : ${p.client}${entry.sourceId ? ` · Origine : ${sourceLabel(entry.sourceId)}` : ''}${!entry.date ? ' · Date exacte non connue (saisie ancienne, mois seul)' : ''}</div>
+          <label>Indépendant</label>
+          <select id="f-entry-freelancer">${freelancerOptions}</select>
+          <label>Date</label>
+          <input type="date" id="f-entry-date" value="${entryDateVal}">
+          <label>Heures effectuées</label>
+          <input type="text" id="f-entry-heures" value="${entry.heures}">
+          <div class="modal-actions">
+            <button class="btn" id="modal-cancel">Annuler</button>
+            <button class="btn btn-primary" id="modal-save">Enregistrer</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      document.getElementById('modal-close').onclick = closeModal;
+      document.getElementById('modal-cancel').onclick = closeModal;
+      document.getElementById('modal-save').onclick = async ()=>{
+        const freelancer = document.getElementById('f-entry-freelancer').value;
+        const date = document.getElementById('f-entry-date').value;
+        const month = date ? date.slice(0,7) : '';
+        const heures = parseFloat(document.getElementById('f-entry-heures').value.replace(',','.'));
+        if(!freelancer){ showAlert('Sélectionnez un indépendant.'); return; }
+        if(!date){ showAlert('La date est requise.'); return; }
+        if(isNaN(heures) || heures <= 0){ showAlert('Merci de saisir un nombre d\u2019heures valide.'); return; }
+        entry.freelancer = freelancer;
+        entry.month = month;
+        entry.date = date;
+        entry.heures = heures;
+        await saveData();
+        closeModal();
+        render();
+      };
+    }
+  }
+
+  if(modal.type === 'addEntry'){
+    const freelancerOptions = state.freelancers.map(f=>`<option value="${f.name}">${f.name}</option>`).join('');
+    const defaultDate = state.financeMonth ? `${state.financeMonth}-01` : `${CURRENT_MONTH}-01`;
+    overlay.innerHTML = `
+      <div class="modal">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Ajouter une saisie de temps</h3>
+        <label>Indépendant</label>
+        <select id="f-entry-freelancer">${freelancerOptions}</select>
+        <label>Date</label>
+        <input type="date" id="f-entry-date" value="${defaultDate}">
+        <label>Heures effectuées</label>
+        <input type="text" id="f-entry-heures" placeholder="7.5">
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-save">Ajouter</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-save').onclick = async ()=>{
+      const freelancer = document.getElementById('f-entry-freelancer').value;
+      const date = document.getElementById('f-entry-date').value;
+      const month = date ? date.slice(0,7) : '';
+      const heures = parseFloat(document.getElementById('f-entry-heures').value.replace(',','.'));
+      if(!freelancer){ showAlert('Ajoutez d\u2019abord un indépendant (barre du bas).'); return; }
+      if(!date){ showAlert('La date est requise.'); return; }
+      if(isNaN(heures) || heures <= 0){ showAlert('Merci de saisir un nombre d\u2019heures valide.'); return; }
+      const p = state.projects.find(pr=>pr.id===state.selectedId);
+      p.timeEntries = (p.timeEntries||[]).concat([{id:uid(), freelancer, heures, month, date}]);
+      state.financeMonth = month;
+      await saveData();
+      closeModal();
+      render();
+    };
+  }
+
+  if(modal.type === 'importGlobal'){
+    overlay.innerHTML = `
+      <div class="modal" style="width:520px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Importer les heures Odoo — tous les projets</h3>
+        <p class="import-hint">Sélectionnez un seul export Excel contenant les lignes de tous vos projets. Chaque ligne est répartie automatiquement vers le bon projet, en comparant la colonne <em>Projet</em> au champ "Nom du projet dans Odoo" renseigné sur chaque fiche (onglet Modifier). Les employés préfixés "[E]" sont détectés comme externes, les autres comme internes.</p>
+        <label>Fichier Excel (.xlsx)</label>
+        <input type="file" id="f-import-global-file" accept=".xlsx,.xls">
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-save">Importer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-save').onclick = async ()=>{
+      const fileInput = document.getElementById('f-import-global-file');
+      const file = fileInput.files[0];
+      if(!file){ showAlert('Choisissez d\u2019abord un fichier.'); return; }
+      try{
+        const buf = await file.arrayBuffer();
+        const workbook = XLSX.read(buf, {type:'array'});
+        const sheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
+        recordKnownOdooProjectNames(rows);
+        mergeImportedRows(rows);
+        await saveImportHistory();
+        const projectNames = Array.from(new Set(rows.map(r=>(r['Projet']||'').toString().trim()).filter(Boolean)));
+        const unmatchedNames = projectNames.filter(name=>!projectNameAlreadyMatched(name));
+        if(unmatchedNames.length){
+          const items = unmatchedNames.map(name=>({label:name, names:[name], checked:true, keyword:null}));
+          modal = {type:'importGlobalReview', data:{rows, items}};
+        } else {
+          const report = importGlobalRows(rows);
+          const unmatched = computeUnmatchedCount(rows);
+          await saveData();
+          modal = {type:'importGlobalResult', data:{report, unmatched}};
+        }
+        render();
+      }catch(err){
+        console.error(err);
+        showAlert('Erreur de lecture du fichier : ' + err.message);
+      }
+    };
+  }
+
+  if(modal.type === 'importGlobalReview'){
+    const {items} = modal.data;
+    const itemsHtml = items.map((it,i)=>{
+      const createdAs = it.keyword ? it.keyword : (cleanOdooProjectLabel(it.names[0]) || it.names[0]);
+      return `
+      <label style="display:flex;align-items:flex-start;gap:8px;margin:8px 0;font-size:13px;color:var(--text-primary);">
+        <input type="checkbox" class="review-check" data-index="${i}" ${it.checked?'checked':''} style="width:auto;margin-top:3px;">
+        <span>${it.label}${it.names.length>1 ? `<br><span style="color:var(--text-secondary);font-size:11px;">${it.names.length} variantes Odoo regroupées : ${it.names.join(' · ')}</span>` : ''}<br><span style="color:var(--text-secondary);font-size:11px;">Sera créé comme : ${createdAs}</span></span>
+      </label>`;
+    }).join('');
+    overlay.innerHTML = `
+      <div class="modal" style="width:540px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Nouveaux projets détectés</h3>
+        <p class="import-hint">Ces noms de projets Odoo ne correspondent à aucun projet existant. Cochez ceux à créer — les autres resteront ignorés pour cet import.</p>
+        <div class="field-row" style="align-items:flex-end;">
+          <div>
+            <label>Regrouper plusieurs variantes en un seul projet</label>
+            <input type="text" id="f-group-keyword" placeholder="ex : Argos">
+          </div>
+          <button class="btn btn-small" id="btn-apply-group" style="margin-top:12px;">Regrouper</button>
+        </div>
+        <p class="import-hint" style="margin-top:4px;">Ex : tapez "Argos" pour fusionner "[Erp] Argos : ATS" et "[Web] Argos : Recrutement" en un seul projet "Argos", qui absorbera aussi automatiquement les futures variantes Argos lors des prochains imports.</p>
+        <div style="margin-top:14px;">${itemsHtml}</div>
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler l'import</button>
+          <button class="btn btn-primary" id="modal-continue">Continuer l'import</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    function syncItemsFromDOM(){
+      document.querySelectorAll('.review-check').forEach(chk=>{
+        modal.data.items[parseInt(chk.dataset.index)].checked = chk.checked;
+      });
+    }
+
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+
+    document.getElementById('btn-apply-group').onclick = ()=>{
+      syncItemsFromDOM();
+      const kwInput = document.getElementById('f-group-keyword');
+      const keyword = kwInput.value.trim();
+      if(!keyword) return;
+      const kwLower = keyword.toLowerCase();
+      const matched = modal.data.items.filter(it=> it.names.some(n=>n.toLowerCase().includes(kwLower)));
+      if(!matched.length){ showAlert('Aucun projet ne correspond à ce mot-clé.'); return; }
+      const remaining = modal.data.items.filter(it=> !it.names.some(n=>n.toLowerCase().includes(kwLower)));
+      const combinedNames = Array.from(new Set(matched.flatMap(it=>it.names)));
+      remaining.push({
+        label: `${keyword} (${combinedNames.length} variante(s) Odoo regroupée(s))`,
+        names: combinedNames,
+        checked: true,
+        keyword: keyword
+      });
+      modal.data.items = remaining;
+      render();
+    };
+
+    document.getElementById('modal-continue').onclick = async ()=>{
+      syncItemsFromDOM();
+      modal.data.items.forEach(it=>{
+        if(it.checked){
+          if(it.keyword){
+            createProjectFromOdooName(it.keyword, it.keyword);
+          } else {
+            createProjectFromOdooName(it.names[0]);
+          }
+        }
+      });
+      const rows = modal.data.rows;
+      const report = importGlobalRows(rows);
+      const unmatched = computeUnmatchedCount(rows);
+      await saveData();
+      modal = {type:'importGlobalResult', data:{report, unmatched}};
+      render();
+    };
+  }
+
+  if(modal.type === 'importGlobalResult'){
+    const {report, unmatched} = modal.data;
+    const rowsHtml = report.map(r=>{
+      if(r.noConfig){
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span>${r.client}</span><span style="color:var(--text-secondary);font-size:12px;">Projet Odoo non renseigné</span></div>`;
+      }
+      let detail = [];
+      if(r.skippedDup) detail.push(`${r.skippedDup} déjà importée(s)`);
+      if(r.skippedInvalid) detail.push(`${r.skippedInvalid} invalide(s)`);
+      if(r.reclassified) detail.push(`${r.reclassified} reclassée(s) vers un sous-projet`);
+      return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span>${r.client}</span><span class="mono">${r.imported} ligne(s)${detail.length ? ' · '+detail.join(', ') : ''}</span></div>`;
+    }).join('');
+    overlay.innerHTML = `
+      <div class="modal" style="width:480px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Import terminé</h3>
+        <div style="margin-top:10px;">${rowsHtml}</div>
+        ${unmatched ? `<p class="import-hint">${unmatched} ligne(s) du fichier ne correspondent à aucun projet configuré (vérifiez le champ "Nom du projet dans Odoo" sur vos fiches, ou il s'agit de temps hors projets clients).</p>` : ''}
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="modal-cancel">Fermer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+  }
+
+  if(modal.type === 'importResult'){
+    const {imported, skipped, skippedProject, skippedInvalid, reclassified} = modal.data;
+    let detail = [];
+    if(skipped) detail.push(`${skipped} déjà importée(s)`);
+    if(skippedProject) detail.push(`${skippedProject} hors projet Odoo indiqué`);
+    if(skippedInvalid) detail.push(`${skippedInvalid} format invalide`);
+    overlay.innerHTML = `
+      <div class="modal" style="width:420px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Import terminé</h3>
+        <p>${imported} ligne(s) importée(s)${detail.length ? ', ' + detail.join(', ') + ' ignorée(s)' : ''}.</p>
+        ${reclassified ? `<p class="import-hint">${reclassified} ligne(s) déjà présente(s) ici ont été retirée(s) car elles correspondent maintenant à un sous-projet (mot-clé) — vérifiez que ce sous-projet a bien été importé aussi.</p>` : ''}
+        ${imported ? '<p class="import-hint">Pensez à vérifier le TJM coût des nouveaux indépendants ajoutés automatiquement (barre du bas, cliquez sur leur nom).</p>' : ''}
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="modal-cancel">Fermer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+  }
+
+  if(modal.type === 'summary'){
+    overlay.innerHTML = `
+      <div class="modal" style="width:560px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Synthèse hebdomadaire</h3>
+        <div id="summary-content">
+          ${modal.loading ? '<p style="color:var(--text-secondary);">Génération en cours<span class="loading-dots"></span></p>' : `<div class="summary-text">${modal.data || ''}</div>`}
+        </div>
+        <div class="modal-actions">
+          ${!modal.loading && modal.data ? '<button class="btn" id="modal-copy">Copier</button>' : ''}
+          <button class="btn btn-primary" id="modal-cancel">Fermer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    const copyBtn = document.getElementById('modal-copy');
+    if(copyBtn) copyBtn.onclick = ()=>{
+      navigator.clipboard.writeText(modal.data);
+      copyBtn.textContent = 'Copié !';
+      setTimeout(()=>{ copyBtn.textContent='Copier'; }, 1500);
+    };
+    return;
+  }
+
+  if(modal.type === 'confirm'){
+    const {message} = modal.data;
+    overlay.innerHTML = `
+      <div class="modal" style="width:420px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Confirmation</h3>
+        <p style="font-size:14px;line-height:1.5;">${message}</p>
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-confirm-yes">Confirmer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-confirm-yes').onclick = async ()=>{
+      const cb = modal.data.onConfirm;
+      closeModal();
+      if(cb) await cb();
+    };
+  }
+
+  if(modal.type === 'alertMsg'){
+    const {message} = modal.data;
+    overlay.innerHTML = `
+      <div class="modal" style="width:420px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Information</h3>
+        <p style="font-size:14px;line-height:1.5;">${message}</p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="modal-cancel">OK</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+  }
+
+  if(!document.getElementById('modal-overlay')) document.body.appendChild(overlay);
+}
+
+function showAlert(message){
+  modal = {type:'alertMsg', data:{message}};
+  render();
+}
+
+function showConfirm(message, onConfirm){
+  modal = {type:'confirm', data:{message, onConfirm}};
+  render();
+}
+
+function closeModal(){
+  modal = null;
+  const el = document.getElementById('modal-overlay');
+  if(el) el.remove();
+}
+
+function localFallbackSummary(){
+  let out = `SYNTHÈSE HEBDOMADAIRE — ${new Date().toISOString().slice(0,10)}\n\n`;
+  state.projects.forEach(p=>{
+    const fin = computeFinance(p);
+    out += `${p.client} (${p.ref})\n`;
+    out += `  Étape : ${STAGES[p.stage]} — Statut : ${healthLabel(p.health)}\n`;
+    out += `  Échéance : ${p.deadline}\n`;
+    out += `  Indépendants : ${p.freelancers.join(', ') || '—'}\n`;
+    out += `  Avancement temps : ${fin.avancementTps.toFixed(0)}% (${fin.totalJours.toFixed(2)}j / ${fin.joursVendus.toFixed(2)}j vendus)\n`;
+    out += `  Marge cumulée : ${formatEUR(fin.margeCumulee)}\n`;
+    if(p.notes) out += `  Notes : ${p.notes}\n`;
+    out += `\n`;
+  });
+  return out;
+}
+
+async function generateSummary(){
+  const projectsWithFinance = state.projects.map(p=>({
+    ...p,
+    finance: computeFinance(p)
+  }));
+  const prompt = `Tu es assistant pour un dirigeant de société de conseil/dev qui pilote des déploiements ERP Odoo réalisés par des indépendants.
+Voici l'état actuel des projets au format JSON (incluant avancement, temps consommé et rentabilité) :
+${JSON.stringify(projectsWithFinance, null, 2)}
+
+Rédige une synthèse hebdomadaire claire et professionnelle, en français, destinée à un usage interne (pas au client), avec :
+- Un résumé global en 1-2 phrases
+- Pour chaque projet : client, étape actuelle, statut, avancement temps/budget, marge, point d'attention si besoin
+- Une section "Priorités de la semaine" qui liste les 2-3 actions les plus urgentes à traiter, en te basant sur les statuts bloqués/à surveiller, les échéances proches et les dérives de marge ou de consommation de jours
+
+Ne mets pas de markdown, du texte brut structuré avec des tirets et des retours à la ligne.`;
+
+  try{
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1200,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await response.json();
+    const textBlocks = (data.content || []).filter(b=>b.type==='text').map(b=>b.text);
+    const text = textBlocks.join('\n').trim();
+    modal = {type:'summary', data: text || localFallbackSummary(), loading:false};
+  }catch(e){
+    console.error('Erreur génération synthèse', e);
+    modal = {type:'summary', data: localFallbackSummary(), loading:false};
+  }
+  render();
+}
+
+loadData();
+</script>
+</body>
+</html>
