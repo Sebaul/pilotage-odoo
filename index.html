@@ -70,16 +70,18 @@ h1,h2,h3,.display{
 .kpi-nav-btn{
   border:none;
   cursor:pointer;
-  text-align:left;
+  text-align:center;
+  justify-content:center;
   font-family:'Inter',sans-serif;
   display:flex;
   align-items:center;
   font-size:14px;
   font-weight:600;
   color:var(--text-primary);
+  background:#2A2140;
   transition:background 0.15s;
 }
-.kpi-nav-btn:hover{background:var(--surface-raised);}
+.kpi-nav-btn:hover{background:#372C54;}
 .kpi-nav-btn.active{
   background:#1E2A2C;
   color:var(--accent-teal);
@@ -532,12 +534,7 @@ table.data-table tfoot td{
 .freelancer-tjm-row .fname{flex:1.4;font-size:13px;}
 .freelancer-tjm-row select{flex:1;}
 .freelancer-tjm-row input{flex:1;}
-html, body{
-  margin:0;
-  padding:0;
-  background:var(--bg);
-  min-height:100vh;
-}
+html, body{margin:0;padding:0;background:var(--bg);min-height:100vh;}
 </style>
 </head>
 <body>
@@ -548,10 +545,6 @@ html, body{
 <script>
 const STAGES = ['Cadrage','Configuration','Développement','Tests','Recette','Go-live'];
 // --- Adaptateur de stockage local (remplace window.storage de Claude) ---
-// Cette page est hébergée en dehors de Claude : les données sont stockées
-// dans le navigateur (localStorage), donc propres à cet appareil/navigateur.
-// Utilisez les boutons Export/Import de l'outil pour transférer les données
-// entre appareils ou navigateurs.
 if(!window.storage){
   window.storage = {
     async get(key){
@@ -559,37 +552,21 @@ if(!window.storage){
         const raw = localStorage.getItem(key);
         if(raw === null || raw === undefined) return null;
         return {key, value: raw, shared:false};
-      }catch(e){
-        console.error('storage.get error', e);
-        return null;
-      }
+      }catch(e){ console.error('storage.get error', e); return null; }
     },
     async set(key, value){
-      try{
-        localStorage.setItem(key, value);
-        return {key, value, shared:false};
-      }catch(e){
-        console.error('storage.set error', e);
-        return null;
-      }
+      try{ localStorage.setItem(key, value); return {key, value, shared:false}; }
+      catch(e){ console.error('storage.set error', e); return null; }
     },
     async delete(key){
-      try{
-        localStorage.removeItem(key);
-        return {key, deleted:true, shared:false};
-      }catch(e){
-        console.error('storage.delete error', e);
-        return null;
-      }
+      try{ localStorage.removeItem(key); return {key, deleted:true, shared:false}; }
+      catch(e){ console.error('storage.delete error', e); return null; }
     },
     async list(prefix){
       try{
         const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
         return {keys, prefix, shared:false};
-      }catch(e){
-        console.error('storage.list error', e);
-        return null;
-      }
+      }catch(e){ console.error('storage.list error', e); return null; }
     }
   };
 }
