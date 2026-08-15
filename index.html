@@ -384,6 +384,13 @@ label{
   font-weight:600;
   font-family:'Space Grotesk',sans-serif;
 }
+.calc-hint{
+  font-size:10px;
+  color:var(--text-secondary);
+  margin-top:5px;
+  line-height:1.4;
+  font-weight:400;
+}
 .progress-outer{
   background:var(--surface-raised);
   border-radius:4px;
@@ -585,8 +592,8 @@ let state = {
   loaded: false,
   activeTab: 'finance',
   financeMonth: null,
-  financeViewMode: 'periode',
-  periodMode: 'mois',
+  periodMode: 'globale',
+  forfaitViewTab: 'client',
   periodFrom: null,
   periodTo: null,
   viewMode: 'project',
@@ -696,6 +703,10 @@ function formatEUR(n){
   return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2}).format(n || 0);
 }
 
+function formatEURRound(n){
+  return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR', minimumFractionDigits:0, maximumFractionDigits:0}).format(Math.round(n || 0));
+}
+
 function healthLabel(h){
   return {ok:'Sur les rails', attention:'À surveiller', bloque:'Bloqué'}[h];
 }
@@ -768,6 +779,7 @@ function migrateLoadedData(){
     if(p.forfaits===undefined) p.forfaits = {};
     if(p.budgetAnnuelJours===undefined) p.budgetAnnuelJours = 0;
     if(p.odooTaskKeyword===undefined) p.odooTaskKeyword = '';
+    if(p.joursVendusParPersonne===undefined) p.joursVendusParPersonne = {};
   });
   state.freelancers.forEach(f=>{
     if(f.tjmCout===undefined) f.tjmCout = 0;
@@ -888,14 +900,93 @@ function monthsFromEntries(p){
   return Array.from(set).sort();
 }
 
-function computeFinance(p){
+function computeForfaitDetail(p, fromMonth, toMonth){
+  fromMonth = fromMonth || '0000-00';
+  toMonth = toMonth || '9999-99';
+  const tjmVendu = getEffectiveTjmVendu(p);
+  const budgetGlobal = p.vendu || 0;
+  const pctRisque = p.pctProdRisque || 0;
+  const joursVendus = tjmVendu ? budgetGlobal/tjmVendu : 0;
+  const joursDisponibles = joursVendus * (pctRisque/100);
+
+  const entries = (p.timeEntries || []).filter(e=> e.month >= fromMonth && e.month <= toMonth);
+  let joursConsommeReel = 0;
+  let joursConsommeBrut = 0;
+  let ssTraitanceCumulee = 0;
+  let ssTraitanceJoursReel = 0;
+  let margeSousTraitanceSeule = 0;
+  const byPerson = {};
+
+  entries.forEach(e=>{
+    const jours = e.heures/7;
+    const coef = getEffectiveCoefficient(p, e.freelancer, e.month);
+    const joursBrut = jours*coef;
+    joursConsommeReel += jours;
+    joursConsommeBrut += joursBrut;
+
+    const fl = state.freelancers.find(f=>f.name===e.freelancer);
+    const type = fl ? fl.type : 'externe';
+    const tjmCout = (fl && type!=='interne') ? (fl.tjmCout||0) : 0;
+    if(type!=='interne'){
+      ssTraitanceCumulee += jours*tjmCout;
+      ssTraitanceJoursReel += jours;
+      margeSousTraitanceSeule += (jours*tjmVendu) - (jours*tjmCout);
+    }
+
+    if(!byPerson[e.freelancer]) byPerson[e.freelancer] = {name:e.freelancer, joursReel:0};
+    byPerson[e.freelancer].joursReel += jours;
+  });
+
+  const facturationCumulee = joursConsommeBrut * tjmVendu; // = client-facing, coef included
+  const facturableSaisiCumule = pctRisque ? (facturationCumulee / (pctRisque/100)) : facturationCumulee;
+  const pctBudgetRestant = budgetGlobal ? (100 - (facturableSaisiCumule/budgetGlobal*100)) : 0;
+
+  const facturableRessenti = budgetGlobal * ((p.avancementFeeling||0)/100);
+  const pctBudgetRestantRessenti = budgetGlobal ? (100 - (facturableRessenti/budgetGlobal*100)) : 0;
+  const facture = p.factureCumulee || 0;
+  const aFacturer = facturableRessenti - facture;
+  const diffRessentiSaisi = facturableSaisiCumule - facturableRessenti;
+
+  const facturableReel = joursConsommeReel * tjmVendu;
+  const margeGlobaleCogitime = facturableReel - ssTraitanceCumulee;
+  const partSousTraitancePct = facturableReel ? (ssTraitanceCumulee/facturableReel*100) : 0;
+  const partSousTraitanceJoursPct = joursConsommeReel ? (ssTraitanceJoursReel/joursConsommeReel*100) : 0;
+
+  const joursVendusParPersonne = p.joursVendusParPersonne || {};
+  const allNames = new Set([...Object.keys(byPerson), ...Object.keys(joursVendusParPersonne)]);
+  const personRows = Array.from(allNames).map(name=>{
+    const joursReel = byPerson[name] ? byPerson[name].joursReel : 0;
+    const joursVenduPersonne = joursVendusParPersonne[name] || 0;
+    const restant = joursVenduPersonne - joursReel;
+    const pctConsomme = joursVenduPersonne ? (joursReel/joursVenduPersonne*100) : null;
+    return {name, joursVenduPersonne, joursReel, restant, pctConsomme};
+  }).sort((a,b)=> b.joursReel-a.joursReel);
+
+  const totalJoursVenduPersonne = personRows.reduce((s,r)=>s+r.joursVenduPersonne,0);
+  const totalJoursReelPersonne = personRows.reduce((s,r)=>s+r.joursReel,0);
+  const totalRestantPersonne = totalJoursVenduPersonne - totalJoursReelPersonne;
+  const totalPctConsommePersonne = totalJoursVenduPersonne ? (totalJoursReelPersonne/totalJoursVenduPersonne*100) : null;
+
+  return {
+    tjmVendu, budgetGlobal, pctRisque, joursVendus, joursDisponibles,
+    joursConsommeReel, joursConsommeBrut,
+    facturationCumulee, facturableSaisiCumule, pctBudgetRestant, pctBudgetRestantRessenti,
+    facturableRessenti, facture, aFacturer, diffRessentiSaisi,
+    facturableReel, ssTraitanceCumulee, ssTraitanceJoursReel, margeGlobaleCogitime, partSousTraitancePct, partSousTraitanceJoursPct, margeSousTraitanceSeule,
+    personRows, totalJoursVenduPersonne, totalJoursReelPersonne, totalRestantPersonne, totalPctConsommePersonne
+  };
+}
+
+function computeFinance(p, fromMonth, toMonth){
+  fromMonth = fromMonth || '0000-00';
+  toMonth = toMonth || '9999-99';
   const tjmVendu = getEffectiveTjmVendu(p);
   const vendu = p.vendu || 0;
   const joursVendus = tjmVendu ? vendu/tjmVendu : 0;
   const pctProdRisque = p.pctProdRisque || 0;
   const nbJourProd = joursVendus * (pctProdRisque/100);
 
-  const entries = p.timeEntries || [];
+  const entries = (p.timeEntries || []).filter(e=> e.month >= fromMonth && e.month <= toMonth);
   const totalHeures = entries.reduce((s,e)=>s+e.heures,0);
   const totalJours = totalHeures/7;
   const restantJours = joursVendus - totalJours;
@@ -1097,6 +1188,42 @@ function renderPilotageBody(p){
 
   const freelancerTags = p.freelancers.map(f=>`<span class="tag">${f}</span>`).join(' ') || '<span style="color:var(--text-secondary);font-size:12px;">Aucun assigné</span>';
 
+  let forfaitPersonBlock = '';
+  if(p.billingType === 'forfaitProjet'){
+    const fd = computeForfaitDetail(p);
+    const personRowsHtml = fd.personRows.map(r=>`
+      <tr>
+        <td>${r.name}</td>
+        <td class="mono"><input type="text" class="f-jours-vendu-personne" data-name="${encodeURIComponent(r.name)}" value="${r.joursVenduPersonne||''}" style="width:70px;text-align:right;padding:4px 6px;"></td>
+        <td class="mono">${r.joursReel.toFixed(2)}</td>
+        <td class="mono" style="color:${r.restant<0?'var(--accent-coral)':'var(--text-primary)'}">${r.joursVenduPersonne ? r.restant.toFixed(2) : '—'}</td>
+        <td class="mono">${r.pctConsomme!==null ? r.pctConsomme.toFixed(0)+'%' : '—'}</td>
+        <td style="text-align:center;"><button class="btn btn-small btn-ghost btn-save-jours-personne" data-name="${encodeURIComponent(r.name)}" style="padding:2px 8px;">Enregistrer</button></td>
+      </tr>`).join('') || `<tr><td colspan="6" style="color:var(--text-secondary);">Aucune saisie sur ce projet</td></tr>`;
+
+    forfaitPersonBlock = `
+      <div class="section-label" style="margin-top:24px;">Répartition par personne</div>
+      <div class="import-hint" style="margin-top:0;">Saisissez le nombre de jours vendus estimé pour chaque personne (répartition manuelle du budget global). Ne dépend pas de la période sélectionnée dans Temps &amp; Rentabilité — c'est un total sur tout l'historique du projet.</div>
+      <table class="data-table">
+        <thead><tr><th>Personne</th><th>Jours vendus (est.)</th><th>Jours consommés (réel)</th><th>Restant</th><th>% consommé</th><th></th></tr></thead>
+        <tbody>${personRowsHtml}</tbody>
+        <tfoot><tr>
+          <td>Total</td>
+          <td class="mono">${fd.totalJoursVenduPersonne.toFixed(2)}</td>
+          <td class="mono">${fd.totalJoursReelPersonne.toFixed(2)}</td>
+          <td class="mono" style="color:${fd.totalRestantPersonne<0?'var(--accent-coral)':'var(--text-primary)'}">${fd.totalJoursVenduPersonne ? fd.totalRestantPersonne.toFixed(2) : '—'}</td>
+          <td class="mono">${fd.totalPctConsommePersonne!==null ? fd.totalPctConsommePersonne.toFixed(0)+'%' : '—'}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+
+      <div class="section-label">Avancement (ressenti)</div>
+      <div class="progress-outer"><div class="progress-inner" style="width:${Math.min(100,computeFinance(p).avancementTps).toFixed(0)}%;"></div></div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${computeFinance(p).avancementTps.toFixed(0)}% du temps vendu consommé (calcul) — ressenti : ${p.avancementFeeling||0}%</div>
+      <input type="range" min="0" max="100" id="f-avancement-feeling" value="${p.avancementFeeling||0}" style="margin-top:8px;width:100%;">
+    `;
+  }
+
   return `
       <div class="section-label">Avancement</div>
       <div class="pipeline">${pipelineHtml}</div>
@@ -1126,6 +1253,8 @@ function renderPilotageBody(p){
       <div class="section-label">Notes / blocages</div>
       <div class="info-block">${p.notes ? p.notes.replace(/\n/g,'<br>') : '<span style="color:var(--text-secondary);">Aucune note</span>'}</div>
 
+      ${forfaitPersonBlock}
+
       <div style="margin-top:24px;">
         <button class="btn btn-primary" id="btn-generate-summary">Générer la synthèse hebdomadaire (tous projets)</button>
       </div>
@@ -1133,24 +1262,30 @@ function renderPilotageBody(p){
 }
 
 function renderFinanceTab(p){
-  const fin = computeFinance(p);
-  const ecart = (p.factureCumulee||0) - fin.facturationCumulee;
+  if(!state.periodMode) state.periodMode = 'globale';
 
-  if(state.financeMonth === null){
-    const def = pickDefaultMonth(p);
-    const allMonths = Array.from(new Set((p.timeEntries||[]).map(e=>e.month))).sort();
-    if(def){
-      state.periodMode = 'mois';
-      state.financeMonth = def;
-      state.periodFrom = def;
-      state.periodTo = def;
-    } else {
-      state.periodMode = 'plage';
-      state.periodFrom = allMonths[0] || CURRENT_MONTH;
-      state.periodTo = allMonths[allMonths.length-1] || CURRENT_MONTH;
-      state.financeMonth = state.periodTo;
+  const allMonthsSet = new Set((p.timeEntries||[]).map(e=>e.month));
+  allMonthsSet.add(CURRENT_MONTH);
+  const allMonths = Array.from(allMonthsSet).sort();
+
+  let rangeFrom, rangeTo;
+  if(state.periodMode === 'mois'){
+    if(!state.financeMonth || !allMonths.includes(state.financeMonth)){
+      state.financeMonth = pickDefaultMonth(p) || allMonths[allMonths.length-1];
     }
+    rangeFrom = rangeTo = state.financeMonth;
+  } else if(state.periodMode === 'plage'){
+    if(!state.periodFrom) state.periodFrom = allMonths[0];
+    if(!state.periodTo) state.periodTo = allMonths[allMonths.length-1];
+    rangeFrom = state.periodFrom;
+    rangeTo = state.periodTo;
+  } else {
+    rangeFrom = '0000-00';
+    rangeTo = '9999-99';
   }
+
+  const fin = computeFinance(p, rangeFrom, rangeTo);
+  const ecart = (p.factureCumulee||0) - fin.facturationCumulee;
 
   const billingLabels = {
     regie: 'Régie (jours consommés)',
@@ -1161,29 +1296,122 @@ function renderFinanceTab(p){
 
   let trackingCardsHtml = '';
   if(p.billingType === 'forfaitProjet'){
-    trackingCardsHtml = `
+    const fd = computeForfaitDetail(p, rangeFrom, rangeTo);
+
+    const clientViewHtml = `
+      <div class="import-hint" style="margin-top:0;">Uniquement les indicateurs communicables au client — la part de risque est déjà intégrée par défaut.</div>
+      <div class="section-label" style="margin-top:0;">Jours</div>
       <div class="fin-cards">
         <div class="fin-card">
-          <div class="fin-card-label">Jours vendus</div>
-          <div class="fin-card-value mono">${fin.joursVendus.toFixed(2)} j</div>
+          <div class="fin-card-label">Vendu</div>
+          <div class="fin-card-value mono">${fd.joursVendus.toFixed(2)} j</div>
+          <div class="calc-hint">Budget ÷ TJM vendu = ${formatEURRound(fd.budgetGlobal)} ÷ ${formatEURRound(fd.tjmVendu)}</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Consommé</div>
-          <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Restant</div>
-          <div class="fin-card-value mono">${fin.restantJours.toFixed(2)} j</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Mois restants (rythme actuel)</div>
-          <div class="fin-card-value mono">${fin.nbMoisRestant!==null ? fin.nbMoisRestant.toFixed(1) : '—'}</div>
+          <div class="fin-card-label">Consommé brut</div>
+          <div class="fin-card-value mono">${fd.joursConsommeBrut.toFixed(2)} j</div>
+          <div class="calc-hint">Somme des jours réels × coefficient par personne</div>
         </div>
       </div>
-      <div class="section-label">Avancement</div>
-      <div class="progress-outer"><div class="progress-inner" style="width:${Math.min(100,fin.avancementTps).toFixed(0)}%;"></div></div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${fin.avancementTps.toFixed(0)}% du temps vendu consommé (calcul) — ressenti : ${p.avancementFeeling||0}%</div>
-      <input type="range" min="0" max="100" id="f-avancement-feeling" value="${p.avancementFeeling||0}" style="margin-top:8px;width:100%;">
+      <div class="section-label">Facturation</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Budget global</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.budgetGlobal)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Facturable selon ressenti</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.facturableRessenti)}</div>
+          <div class="calc-hint">Budget global × ressenti (${p.avancementFeeling||0}%)</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">% budget restant</div>
+          <div class="fin-card-value mono" style="color:${fd.pctBudgetRestantRessenti<0?'var(--accent-coral)':'var(--text-primary)'}">${fd.pctBudgetRestantRessenti.toFixed(0)}%</div>
+          <div class="calc-hint">100% − (Facturable selon ressenti ÷ Budget global)</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Facturé</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.facture)}</div>
+          <div class="calc-hint">Saisie manuelle</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">À facturer</div>
+          <div class="fin-card-value mono" style="color:${fd.aFacturer<0?'var(--accent-coral)':'var(--accent-teal)'}">${formatEURRound(fd.aFacturer)}</div>
+          <div class="calc-hint">Facturable selon ressenti − Facturé</div>
+        </div>
+      </div>
+    `;
+
+    const cogitimeViewHtml = `
+      <div class="import-hint" style="margin-top:0;">Vision interne — inclut aussi les jours des personnes non sous-traitantes.</div>
+      <div class="section-label" style="margin-top:0;">Jours</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">À consommer (hors risque)</div>
+          <div class="fin-card-value mono">${fd.joursDisponibles.toFixed(2)} j</div>
+          <div class="calc-hint">Vendu × % prod risque = ${fd.joursVendus.toFixed(2)}j × ${fd.pctRisque}%</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Consommé réel (saisi)</div>
+          <div class="fin-card-value mono">${fd.joursConsommeReel.toFixed(2)} j</div>
+          <div class="calc-hint">Somme des heures saisies ÷ 7</div>
+        </div>
+      </div>
+      <div class="section-label">Facturation</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Facturable réel</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.facturableReel)}</div>
+          <div class="calc-hint">Consommé réel × TJM vendu = ${fd.joursConsommeReel.toFixed(2)}j × ${formatEURRound(fd.tjmVendu)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Facturable saisi cumulé</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.facturableSaisiCumule)}</div>
+          <div class="calc-hint">(Consommé brut × TJM vendu) ÷ % prod risque</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Diff. avec Facturable selon ressenti</div>
+          <div class="fin-card-value mono" style="color:${fd.diffRessentiSaisi>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(fd.diffRessentiSaisi)}</div>
+          <div class="calc-hint">Facturable saisi cumulé − Facturable selon ressenti</div>
+        </div>
+      </div>
+    `;
+
+    const soustraitanceViewHtml = `
+      <div class="import-hint" style="margin-top:0;">Zoom sur ce qui est réalisé par des externes uniquement.</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Sous-traitance (jours réels)</div>
+          <div class="fin-card-value mono">${fd.ssTraitanceJoursReel.toFixed(2)} j</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Coût réel de la sous-traitance</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.ssTraitanceCumulee)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Part de la sous-traitance</div>
+          <div class="fin-card-value mono">${fd.partSousTraitanceJoursPct.toFixed(0)}%</div>
+          <div class="calc-hint">Jours sous-traités ÷ Jours consommés réels</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Marge Cogitime (sous-traitance seule)</div>
+          <div class="fin-card-value mono" style="color:${fd.margeSousTraitanceSeule>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(fd.margeSousTraitanceSeule)}</div>
+          <div class="calc-hint">Uniquement les externes : (jours × TJM vendu) − (jours × TJM coût)</div>
+        </div>
+      </div>
+    `;
+
+    const fpTab = state.forfaitViewTab || 'client';
+    const fpBody = fpTab==='cogitime' ? cogitimeViewHtml : (fpTab==='soustraitance' ? soustraitanceViewHtml : clientViewHtml);
+
+    trackingCardsHtml = `
+      <div class="tabs" style="margin-bottom:16px;">
+        <div class="tab ${fpTab==='client'?'active':''}" data-fptab="client">Vue Client</div>
+        <div class="tab ${fpTab==='cogitime'?'active':''}" data-fptab="cogitime">Vue interne Cogitime</div>
+        <div class="tab ${fpTab==='soustraitance'?'active':''}" data-fptab="soustraitance">Zoom sous-traitance</div>
+      </div>
+      ${fpBody}
+      <div class="import-hint" style="margin-top:14px;">La répartition par personne et l'avancement ressenti se trouvent dans l'onglet <strong>Pilotage</strong> (ils ne dépendent pas de la période sélectionnée ici).</div>
     `;
   } else if(p.billingType === 'budgetAnnuel'){
     trackingCardsHtml = `
@@ -1201,7 +1429,7 @@ function renderFinanceTab(p){
           <div class="fin-card-value mono" style="color:${fin.restantAnnee>=0?'var(--text-primary)':'var(--accent-coral)'}">${fin.restantAnnee.toFixed(2)} j</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Consommé total (tous mois)</div>
+          <div class="fin-card-label">Consommé (période sélectionnée)</div>
           <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
         </div>
       </div>
@@ -1211,10 +1439,10 @@ function renderFinanceTab(p){
       <div class="fin-cards">
         <div class="fin-card">
           <div class="fin-card-label">Forfait du mois en cours</div>
-          <div class="fin-card-value mono">${formatEUR(getForfaitMensuel(p, CURRENT_MONTH))}</div>
+          <div class="fin-card-value mono">${formatEURRound(getForfaitMensuel(p, CURRENT_MONTH))}</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Heures consommées (total)</div>
+          <div class="fin-card-label">Heures consommées (période sélectionnée)</div>
           <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
         </div>
       </div>
@@ -1224,7 +1452,7 @@ function renderFinanceTab(p){
       <div class="import-hint" style="margin-top:0;">Projet en régie pure : facturé selon les jours réellement consommés, sans budget initial à surveiller.</div>
       <div class="fin-cards">
         <div class="fin-card">
-          <div class="fin-card-label">Jours consommés (total)</div>
+          <div class="fin-card-label">Jours consommés (période sélectionnée)</div>
           <div class="fin-card-value mono">${fin.totalJours.toFixed(2)} j</div>
         </div>
       </div>
@@ -1239,62 +1467,34 @@ function renderFinanceTab(p){
     return `${d}/${m}/${y}`;
   }
   let periodeLabel;
-  if(fin.premierJour){
-    periodeLabel = fin.premierJour===fin.dernierJour ? formatDateFr(fin.premierJour) : `${formatDateFr(fin.premierJour)} → ${formatDateFr(fin.dernierJour)}`;
-    if(fin.nbSansDate) periodeLabel += ` (+ ${fin.nbSansDate} saisie(s) ancienne(s) sans date exacte, non comptée(s) ici)`;
-  } else if(fin.premierMois){
-    periodeLabel = `${fin.premierMois} → ${fin.dernierMois} (mois seul — aucune de ces saisies n'a de date exacte)`;
+  if(fin.premierMois){
+    if(fin.premierJour && !fin.nbSansDate){
+      periodeLabel = fin.premierJour===fin.dernierJour ? formatDateFr(fin.premierJour) : `${formatDateFr(fin.premierJour)} → ${formatDateFr(fin.dernierJour)}`;
+    } else if(fin.premierJour){
+      periodeLabel = `${fin.premierMois} → ${fin.dernierMois} (dont ${formatDateFr(fin.premierJour)} → ${formatDateFr(fin.dernierJour)} avec date exacte ; ${fin.nbSansDate} saisie(s) au mois seul, sans date précise)`;
+    } else {
+      periodeLabel = `${fin.premierMois} → ${fin.dernierMois} (mois seul — aucune de ces saisies n'a de date exacte)`;
+    }
   } else {
     periodeLabel = 'Aucune saisie';
   }
 
-  const globalBlock = `
-      <div class="import-hint" style="margin-top:0;margin-bottom:14px;">Typologie de facturation : <strong>${billingLabels[p.billingType] || billingLabels.forfaitProjet}</strong>${getReferenceProject(p) ? ` · TJM &amp; coefficients hérités de ${getReferenceProject(p).client}` : ''}</div>
-      <div class="import-hint" style="margin-top:0;margin-bottom:14px;">Période prise en compte pour les indicateurs ci-dessous : <strong>${periodeLabel}</strong></div>
+  const monthOptions = allMonths.map(m=>`<option value="${m}" ${m===state.financeMonth?'selected':''}>${m}</option>`).join('');
 
-      ${trackingCardsHtml}
-
-      <div class="section-label">Facturation</div>
-      <div class="fin-cards">
-        <div class="fin-card">
-          <div class="fin-card-label">Facturable cumulé (calculé)</div>
-          <div class="fin-card-value mono">${formatEUR(fin.facturationCumulee)}</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Facturé (saisie manuelle)</div>
-          <div class="fin-card-value mono">${formatEUR(p.factureCumulee||0)}</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Écart</div>
-          <div class="fin-card-value mono" style="color:${ecart>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(ecart)}</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Marge cumulée</div>
-          <div class="fin-card-value mono">${formatEUR(fin.margeCumulee)}</div>
-        </div>
-      </div>
-
-      <div class="fin-cards">
-        <div class="fin-card">
-          <div class="fin-card-label">Sous-traitance cumulée</div>
-          <div class="fin-card-value mono">${formatEUR(fin.ssTraitanceCumulee)}</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Part sous-traitance</div>
-          <div class="fin-card-value mono">${partSousTraitance.toFixed(0)}%</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">% Marge Cogitime</div>
-          <div class="fin-card-value mono" style="color:${margePctCumulee>=0?'var(--accent-teal)':'var(--accent-coral)'}">${margePctCumulee.toFixed(0)}%</div>
-        </div>
+  const periodSelectorHtml = `
+      <div class="month-select-row">
+        <label style="margin:0;">Période</label>
+        <select id="f-period-mode">
+          <option value="globale" ${state.periodMode==='globale'?'selected':''}>Globale (tout l'historique)</option>
+          <option value="mois" ${state.periodMode==='mois'?'selected':''}>Mois calendaire</option>
+          <option value="plage" ${state.periodMode==='plage'?'selected':''}>Plage personnalisée</option>
+        </select>
+        ${state.periodMode==='mois' ? `<select id="f-finance-month">${monthOptions}</select>` : ''}
+        ${state.periodMode==='plage' ? `<input type="month" id="f-period-from" value="${state.periodFrom}" style="width:auto;"><span style="color:var(--text-secondary);">→</span><input type="month" id="f-period-to" value="${state.periodTo}" style="width:auto;">` : ''}
       </div>
   `;
 
-  const rangeFrom = state.periodMode==='mois' ? state.financeMonth : state.periodFrom;
-  const rangeTo = state.periodMode==='mois' ? state.financeMonth : state.periodTo;
   const breakdown = computeRangeBreakdown(p, rangeFrom, rangeTo);
-  const months = monthsFromEntries(p);
-  const monthOptions = months.map(m=>`<option value="${m}" ${m===state.financeMonth?'selected':''}>${m}</option>`).join('');
 
   const rowsHtml = breakdown.rows.map(r=>`
     <tr>
@@ -1322,7 +1522,7 @@ function renderFinanceTab(p){
           <button class="btn btn-small btn-save-coef" data-name="${encodeURIComponent(r.name)}">Enregistrer</button>
         </div>
       `).join('')}
-  ` : '';
+  ` : (p.useCoef ? `<div class="import-hint" style="margin-top:24px;">Sélectionnez "Mois calendaire" pour éditer les coefficients d'un mois précis.</div>` : '');
 
   const forfaitEditorHtml = (p.billingType==='maintenance' && state.periodMode==='mois') ? `
       <div class="section-label" style="margin-top:24px;">Forfait mensuel — ${state.financeMonth}</div>
@@ -1332,48 +1532,61 @@ function renderFinanceTab(p){
         <input type="text" id="f-forfait-value" value="${getForfaitMensuel(p, state.financeMonth)}" style="width:120px;flex:none;">
         <button class="btn btn-small" id="btn-save-forfait">Enregistrer</button>
       </div>
-  ` : '';
+  ` : (p.billingType==='maintenance' ? `<div class="import-hint" style="margin-top:24px;">Sélectionnez "Mois calendaire" pour éditer le forfait d'un mois précis.</div>` : '');
 
-  const periodBlock = `
-      <div class="month-select-row">
-        <label style="margin:0;">Période</label>
-        <select id="f-period-mode">
-          <option value="mois" ${state.periodMode==='mois'?'selected':''}>Mois calendaire</option>
-          <option value="plage" ${state.periodMode==='plage'?'selected':''}>Plage personnalisée</option>
-        </select>
-        ${state.periodMode==='mois'
-          ? `<select id="f-finance-month">${monthOptions}</select>`
-          : `<input type="month" id="f-period-from" value="${state.periodFrom}" style="width:auto;"><span style="color:var(--text-secondary);">→</span><input type="month" id="f-period-to" value="${state.periodTo}" style="width:auto;">`
-        }
+  return `
+      <div class="import-hint" style="margin-top:0;margin-bottom:14px;">Typologie de facturation : <strong>${billingLabels[p.billingType] || billingLabels.forfaitProjet}</strong>${getReferenceProject(p) ? ` · TJM &amp; coefficients hérités de ${getReferenceProject(p).client}` : ''}</div>
+
+      ${periodSelectorHtml}
+
+      ${state.periodMode==='globale' ? `<div class="import-hint" style="margin-top:0;margin-bottom:14px;">Période réellement couverte par les saisies : <strong>${periodeLabel}</strong></div>` : ''}
+
+      ${trackingCardsHtml}
+
+      ${p.billingType !== 'forfaitProjet' ? `
+      <div class="section-label">Facturation</div>
+      <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Facturable (période sélectionnée)</div>
+          <div class="fin-card-value mono">${formatEURRound(fin.facturationCumulee)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Facturé (saisie manuelle)</div>
+          <div class="fin-card-value mono">${formatEURRound(p.factureCumulee||0)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Écart</div>
+          <div class="fin-card-value mono" style="color:${ecart>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(ecart)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Marge (période sélectionnée)</div>
+          <div class="fin-card-value mono">${formatEURRound(fin.margeCumulee)}</div>
+        </div>
       </div>
 
       <div class="fin-cards">
         <div class="fin-card">
-          <div class="fin-card-label">Jours (période)</div>
-          <div class="fin-card-value mono">${breakdown.totals.jours.toFixed(2)} j</div>
+          <div class="fin-card-label">Sous-traitance (période sélectionnée)</div>
+          <div class="fin-card-value mono">${formatEURRound(fin.ssTraitanceCumulee)}</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Facturation (période)</div>
-          <div class="fin-card-value mono">${formatEUR(breakdown.totals.facturation)}</div>
+          <div class="fin-card-label">Part sous-traitance</div>
+          <div class="fin-card-value mono">${partSousTraitance.toFixed(0)}%</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Sous-traitance (période)</div>
-          <div class="fin-card-value mono">${formatEUR(breakdown.totals.ssTraitance)}</div>
+          <div class="fin-card-label">% Marge Cogitime</div>
+          <div class="fin-card-value mono" style="color:${margePctCumulee>=0?'var(--accent-teal)':'var(--accent-coral)'}">${margePctCumulee.toFixed(0)}%</div>
         </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Marge (période)</div>
-          <div class="fin-card-value mono">${formatEUR(breakdown.totals.marge)} (${breakdown.totals.margePct.toFixed(0)}%)</div>
-        </div>
-      </div>
+      </div>` : ''}
 
-      <div class="month-select-row">
+      <div class="month-select-row" style="margin-top:20px;">
         <button class="btn btn-small" id="btn-import-odoo">Importer les heures Odoo</button>
         <button class="btn btn-small" id="btn-add-entry">+ Ajouter une saisie</button>
-        <button class="btn btn-small btn-ghost" id="btn-clear-period">Effacer cette période</button>
+        ${state.periodMode!=='globale' ? `<button class="btn btn-small btn-ghost" id="btn-clear-period">Effacer cette période</button>` : ''}
         <button class="btn btn-small btn-ghost" id="btn-clear-entries" style="margin-left:auto;">Vider tout</button>
       </div>
 
-      <div class="section-label">Détail par indépendant</div>
+      <div class="section-label">Détail par indépendant (période sélectionnée)</div>
       <table class="data-table">
         <thead><tr><th>Indépendant</th><th>Heures saisie</th><th>Heures</th><th>Jours</th>${p.useCoef ? '<th>Coef</th><th>Jours facturés</th>' : ''}<th>Facturation</th><th>Sous-traitance</th><th>Marge</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
@@ -1390,16 +1603,6 @@ function renderFinanceTab(p){
       </table>
       ${coefEditorHtml}
       ${forfaitEditorHtml}
-  `;
-
-  return `
-    <div class="tabs" style="margin-bottom:16px;">
-      <div class="tab ${state.financeViewMode!=='periode'?'active':''}" data-fview="global">Vue globale</div>
-      <div class="tab ${state.financeViewMode==='periode'?'active':''}" data-fview="periode">Vue période</div>
-    </div>
-    <div>
-      ${state.financeViewMode==='periode' ? periodBlock : globalBlock}
-    </div>
   `;
 }
 
@@ -2216,7 +2419,7 @@ function attachMainPanelEvents(){
   document.querySelectorAll('.tab').forEach(tab=>{
     tab.addEventListener('click', ()=>{
       if(tab.dataset.tab){ state.activeTab = tab.dataset.tab; }
-      else if(tab.dataset.fview){ state.financeViewMode = tab.dataset.fview; }
+      else if(tab.dataset.fptab){ state.forfaitViewTab = tab.dataset.fptab; }
       render();
     });
   });
@@ -2302,6 +2505,19 @@ function attachMainPanelEvents(){
     setForfaitMensuel(p, state.financeMonth, value);
     await saveData();
     render();
+  });
+
+  document.querySelectorAll('.btn-save-jours-personne').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const name = decodeURIComponent(btn.dataset.name);
+      const input = document.querySelector(`.f-jours-vendu-personne[data-name="${btn.dataset.name}"]`);
+      const value = parseFloat((input.value||'0').replace(',','.')) || 0;
+      const p = state.projects.find(pr=>pr.id===state.selectedId);
+      if(!p.joursVendusParPersonne) p.joursVendusParPersonne = {};
+      p.joursVendusParPersonne[name] = value;
+      await saveData();
+      render();
+    });
   });
 
   const importBtn = document.getElementById('btn-import-odoo');
@@ -2409,6 +2625,26 @@ function rowMatchesKeyword(row, keyword){
   return text.includes(kw);
 }
 
+function normalizeOdooRow(row){
+  const pick = (...names) => {
+    for(const n of names){
+      const v = row[n];
+      if(v !== undefined && v !== null && v !== '') return v;
+    }
+    return '';
+  };
+  return {
+    'ID': pick('ID','id'),
+    'Date': pick('Date','date'),
+    'Employé': pick('Employé','employee_id'),
+    'Projet': pick('Projet','project_id'),
+    'Tâche': pick('Tâche','task_id'),
+    'Description': pick('Description','name'),
+    'Quantité': pick('Quantité','unit_amount'),
+    "Ticket d'assistance": pick("Ticket d'assistance","helpdesk_ticket_id")
+  };
+}
+
 function recordKnownOdooProjectNames(rows){
   const set = new Set(state.knownOdooProjectNames || []);
   rows.forEach(r=>{
@@ -2506,7 +2742,7 @@ function createProjectFromOdooName(odooName, clientLabelOverride){
     notes:'',
     tjmVendu:0, vendu:0, pctProdRisque:0, factureCumulee:0,
     odooProjectName: odooName, odooTaskKeyword:'', driveLink:'',
-    useCoef:false, coefficients:{}, billingType:'forfaitProjet', inheritFrom:'', forfaits:{}, budgetAnnuelJours:0,
+    useCoef:false, coefficients:{}, billingType:'forfaitProjet', inheritFrom:'', forfaits:{}, budgetAnnuelJours:0, joursVendusParPersonne:{},
     avancementFeeling:0, timeEntries:[]
   };
   state.projects.push(newP);
@@ -2771,7 +3007,7 @@ function renderModal(){
           lastUpdate: new Date().toISOString().slice(0,10),
           notes,
           tjmVendu, vendu, pctProdRisque, factureCumulee, odooProjectName, odooTaskKeyword, driveLink,
-          useCoef, coefficients:{}, billingType, inheritFrom, budgetAnnuelJours, forfaits:{},
+          useCoef, coefficients:{}, billingType, inheritFrom, budgetAnnuelJours, forfaits:{}, joursVendusParPersonne:{},
           avancementFeeling:0, timeEntries:[]
         };
         state.projects.push(newP);
@@ -2938,7 +3174,8 @@ function renderModal(){
         const buf = await file.arrayBuffer();
         const workbook = XLSX.read(buf, {type:'array'});
         const sheetName = workbook.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
+        let rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
+        rows = rows.map(normalizeOdooRow);
         recordKnownOdooProjectNames(rows);
         mergeImportedRows(rows);
         await saveImportHistory();
@@ -3078,7 +3315,8 @@ function renderModal(){
         const buf = await file.arrayBuffer();
         const workbook = XLSX.read(buf, {type:'array'});
         const sheetName = workbook.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
+        let rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
+        rows = rows.map(normalizeOdooRow);
         recordKnownOdooProjectNames(rows);
         mergeImportedRows(rows);
         await saveImportHistory();
