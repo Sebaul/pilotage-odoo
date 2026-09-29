@@ -391,6 +391,16 @@ label{
   line-height:1.4;
   font-weight:400;
 }
+.fin-card.fin-card-key{
+  border:1px solid var(--accent-teal);
+  background:#16211F;
+}
+.fin-card.fin-card-key .fin-card-label{
+  color:var(--accent-teal);
+}
+.fin-card.fin-card-key .fin-card-value{
+  font-size:25px;
+}
 .progress-outer{
   background:var(--surface-raised);
   border-radius:4px;
@@ -587,6 +597,7 @@ let state = {
   projects: [],
   freelancers: [],
   knownOdooProjectNames: [],
+  odooRelayUrl: '',
   allImportedRows: [],
   selectedId: null,
   loaded: false,
@@ -628,6 +639,7 @@ async function loadData(){
       state.projects = parsed.projects || [];
       state.freelancers = parsed.freelancers || [];
       state.knownOdooProjectNames = parsed.knownOdooProjectNames || [];
+      state.odooRelayUrl = parsed.odooRelayUrl || '';
       migrateLoadedData();
       const derivedNames = new Set(state.knownOdooProjectNames || []);
       state.projects.forEach(p=>{
@@ -664,7 +676,8 @@ async function saveData(){
     await window.storage.set(STORAGE_KEY, JSON.stringify({
       projects: state.projects,
       freelancers: state.freelancers,
-      knownOdooProjectNames: state.knownOdooProjectNames
+      knownOdooProjectNames: state.knownOdooProjectNames,
+      odooRelayUrl: state.odooRelayUrl
     }), false);
   }catch(e){
     console.error('Erreur de sauvegarde', e);
@@ -705,6 +718,10 @@ function formatEUR(n){
 
 function formatEURRound(n){
   return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR', minimumFractionDigits:0, maximumFractionDigits:0}).format(Math.round(n || 0));
+}
+
+function renderOkBadge(isOk, warnLabel){
+  return `<span class="mono" style="font-size:11px;padding:2px 8px;border-radius:10px;background:${isOk?'rgba(69,184,172,0.15)':'rgba(226,114,91,0.15)'};color:${isOk?'var(--accent-teal)':'var(--accent-coral)'};margin-left:8px;">${isOk?'✓ Ok':(warnLabel||'⚠ À vérifier')}</span>`;
 }
 
 function healthLabel(h){
@@ -795,7 +812,8 @@ function exportAllData(){
     projects: state.projects,
     freelancers: state.freelancers,
     knownOdooProjectNames: state.knownOdooProjectNames,
-    allImportedRows: state.allImportedRows
+    allImportedRows: state.allImportedRows,
+    odooRelayUrl: state.odooRelayUrl
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -820,6 +838,7 @@ async function importAllDataFromFile(file){
     state.freelancers = payload.freelancers;
     state.knownOdooProjectNames = payload.knownOdooProjectNames || [];
     state.allImportedRows = payload.allImportedRows || [];
+    state.odooRelayUrl = payload.odooRelayUrl || state.odooRelayUrl || '';
     migrateLoadedData();
     await saveData();
     await saveImportHistory();
@@ -879,6 +898,7 @@ function renderSidebar(){
       <div class="sidebar-header">
         <div class="sidebar-title">Projets</div>
         <button class="btn btn-small" id="btn-import-global">Importer Odoo</button>
+        <button class="btn btn-small btn-ghost" id="btn-import-relay" title="Importer directement depuis Odoo, sans fichier Excel">⚡ Direct</button>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px;">
         <button class="btn btn-small btn-ghost" id="btn-export-backup" style="flex:1;">⬇️ Exporter</button>
@@ -914,6 +934,7 @@ function computeForfaitDetail(p, fromMonth, toMonth){
   let joursConsommeBrut = 0;
   let ssTraitanceCumulee = 0;
   let ssTraitanceJoursReel = 0;
+  let ssTraitanceJoursBrut = 0;
   let margeSousTraitanceSeule = 0;
   const byPerson = {};
 
@@ -930,6 +951,7 @@ function computeForfaitDetail(p, fromMonth, toMonth){
     if(type!=='interne'){
       ssTraitanceCumulee += jours*tjmCout;
       ssTraitanceJoursReel += jours;
+      ssTraitanceJoursBrut += joursBrut;
       margeSousTraitanceSeule += (jours*tjmVendu) - (jours*tjmCout);
     }
 
@@ -945,7 +967,7 @@ function computeForfaitDetail(p, fromMonth, toMonth){
   const pctBudgetRestantRessenti = budgetGlobal ? (100 - (facturableRessenti/budgetGlobal*100)) : 0;
   const facture = p.factureCumulee || 0;
   const aFacturer = facturableRessenti - facture;
-  const diffRessentiSaisi = facturableSaisiCumule - facturableRessenti;
+  const diffRessentiSaisi = facturableRessenti - facturableSaisiCumule;
 
   const facturableReel = joursConsommeReel * tjmVendu;
   const margeGlobaleCogitime = facturableReel - ssTraitanceCumulee;
@@ -972,7 +994,7 @@ function computeForfaitDetail(p, fromMonth, toMonth){
     joursConsommeReel, joursConsommeBrut,
     facturationCumulee, facturableSaisiCumule, pctBudgetRestant, pctBudgetRestantRessenti,
     facturableRessenti, facture, aFacturer, diffRessentiSaisi,
-    facturableReel, ssTraitanceCumulee, ssTraitanceJoursReel, margeGlobaleCogitime, partSousTraitancePct, partSousTraitanceJoursPct, margeSousTraitanceSeule,
+    facturableReel, ssTraitanceCumulee, ssTraitanceJoursReel, ssTraitanceJoursBrut, margeGlobaleCogitime, partSousTraitancePct, partSousTraitanceJoursPct, margeSousTraitanceSeule,
     personRows, totalJoursVenduPersonne, totalJoursReelPersonne, totalRestantPersonne, totalPctConsommePersonne
   };
 }
@@ -1294,37 +1316,66 @@ function renderFinanceTab(p){
     maintenance: 'Support & maintenance (forfait mensuel)'
   };
 
+  const breakdown = computeRangeBreakdown(p, rangeFrom, rangeTo);
+
   let trackingCardsHtml = '';
   if(p.billingType === 'forfaitProjet'){
     const fd = computeForfaitDetail(p, rangeFrom, rangeTo);
+
+    const pctConsommeRessenti = p.avancementFeeling||0;
+    const joursConsommeRessenti = fd.joursVendus * (pctConsommeRessenti/100);
+    const pctConsommeBrut = fd.joursVendus ? (fd.joursConsommeBrut/fd.joursVendus*100) : 0;
+    const diffPts = pctConsommeRessenti - pctConsommeBrut;
 
     const clientViewHtml = `
       <div class="import-hint" style="margin-top:0;">Uniquement les indicateurs communicables au client — la part de risque est déjà intégrée par défaut.</div>
       <div class="section-label" style="margin-top:0;">Jours</div>
       <div class="fin-cards">
-        <div class="fin-card">
+        <div class="fin-card fin-card-key">
           <div class="fin-card-label">Vendu</div>
           <div class="fin-card-value mono">${fd.joursVendus.toFixed(2)} j</div>
           <div class="calc-hint">Budget ÷ TJM vendu = ${formatEURRound(fd.budgetGlobal)} ÷ ${formatEURRound(fd.tjmVendu)}</div>
         </div>
-        <div class="fin-card">
+        <div class="fin-card fin-card-key">
+          <div class="fin-card-label">Consommé ressenti</div>
+          <div class="fin-card-value mono">${joursConsommeRessenti.toFixed(2)} j</div>
+          <div class="calc-hint">Vendu × ressenti = ${pctConsommeRessenti}% du vendu</div>
+        </div>
+        <div class="fin-card fin-card-key">
           <div class="fin-card-label">Consommé brut</div>
           <div class="fin-card-value mono">${fd.joursConsommeBrut.toFixed(2)} j</div>
-          <div class="calc-hint">Somme des jours réels × coefficient par personne</div>
+          <div class="calc-hint">Somme des jours réels × coefficient par personne — ${pctConsommeBrut.toFixed(0)}% du vendu</div>
+        </div>
+        <div class="fin-card fin-card-key">
+          <div class="fin-card-label">Diff</div>
+          <div class="fin-card-value mono">${diffPts>=0?'+':''}${diffPts.toFixed(0)} pts ${renderOkBadge(diffPts>0)}</div>
+          <div class="calc-hint">% consommé ressenti − % consommé brut — Ok si &gt; 0</div>
         </div>
       </div>
       <div class="section-label">Facturation</div>
       <div class="fin-cards">
-        <div class="fin-card">
+        <div class="fin-card fin-card-key">
           <div class="fin-card-label">Budget global</div>
           <div class="fin-card-value mono">${formatEURRound(fd.budgetGlobal)}</div>
         </div>
-        <div class="fin-card">
+        <div class="fin-card fin-card-key">
           <div class="fin-card-label">Facturable selon ressenti</div>
           <div class="fin-card-value mono">${formatEURRound(fd.facturableRessenti)}</div>
           <div class="calc-hint">Budget global × ressenti (${p.avancementFeeling||0}%)</div>
         </div>
         <div class="fin-card">
+          <div class="fin-card-label">Facturable brut</div>
+          <div class="fin-card-value mono">${formatEURRound(fd.facturableSaisiCumule)}</div>
+          <div class="calc-hint">(Consommé brut × TJM vendu) ÷ % prod risque</div>
+        </div>
+        <div class="fin-card fin-card-key">
+          <div class="fin-card-label">Diff. avec ressenti (selon facturable brut)</div>
+          <div class="fin-card-value mono" style="color:${fd.diffRessentiSaisi>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(fd.diffRessentiSaisi)} ${renderOkBadge(fd.diffRessentiSaisi>=0)}</div>
+          <div class="calc-hint">Facturable selon ressenti − Facturable brut — Ok si ≥ 0</div>
+        </div>
+      </div>
+      <div class="fin-cards">
+        <div class="fin-card fin-card-key">
           <div class="fin-card-label">% budget restant</div>
           <div class="fin-card-value mono" style="color:${fd.pctBudgetRestantRessenti<0?'var(--accent-coral)':'var(--text-primary)'}">${fd.pctBudgetRestantRessenti.toFixed(0)}%</div>
           <div class="calc-hint">100% − (Facturable selon ressenti ÷ Budget global)</div>
@@ -1342,6 +1393,8 @@ function renderFinanceTab(p){
       </div>
     `;
 
+    const pctJRestantReel = fd.joursDisponibles ? ((fd.joursDisponibles - fd.joursConsommeReel)/fd.joursDisponibles*100) : 0;
+
     const cogitimeViewHtml = `
       <div class="import-hint" style="margin-top:0;">Vision interne — inclut aussi les jours des personnes non sous-traitantes.</div>
       <div class="section-label" style="margin-top:0;">Jours</div>
@@ -1356,30 +1409,33 @@ function renderFinanceTab(p){
           <div class="fin-card-value mono">${fd.joursConsommeReel.toFixed(2)} j</div>
           <div class="calc-hint">Somme des heures saisies ÷ 7</div>
         </div>
+        <div class="fin-card">
+          <div class="fin-card-label">% J restant réel</div>
+          <div class="fin-card-value mono">${pctJRestantReel.toFixed(0)}%</div>
+          <div class="calc-hint">(À consommer hors risque − Consommé réel) ÷ À consommer hors risque</div>
+        </div>
       </div>
       <div class="section-label">Facturation</div>
       <div class="fin-cards">
         <div class="fin-card">
-          <div class="fin-card-label">Facturable réel</div>
-          <div class="fin-card-value mono">${formatEURRound(fd.facturableReel)}</div>
-          <div class="calc-hint">Consommé réel × TJM vendu = ${fd.joursConsommeReel.toFixed(2)}j × ${formatEURRound(fd.tjmVendu)}</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Facturable saisi cumulé</div>
-          <div class="fin-card-value mono">${formatEURRound(fd.facturableSaisiCumule)}</div>
-          <div class="calc-hint">(Consommé brut × TJM vendu) ÷ % prod risque</div>
-        </div>
-        <div class="fin-card">
-          <div class="fin-card-label">Diff. avec Facturable selon ressenti</div>
-          <div class="fin-card-value mono" style="color:${fd.diffRessentiSaisi>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(fd.diffRessentiSaisi)}</div>
-          <div class="calc-hint">Facturable saisi cumulé − Facturable selon ressenti</div>
+          <div class="fin-card-label">Marge</div>
+          <div class="fin-card-value mono" style="color:${breakdown.totals.marge>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(breakdown.totals.marge)} (${breakdown.totals.margePct.toFixed(0)}%)</div>
+          <div class="calc-hint">Reprend le total du tableau "Détail par indépendant" ci-dessous</div>
         </div>
       </div>
     `;
 
+    const partSousTraitanceBrut = fd.joursConsommeBrut ? (fd.ssTraitanceJoursBrut/fd.joursConsommeBrut*100) : 0;
+    const margePctSousTraitance = (fd.ssTraitanceJoursReel*fd.tjmVendu) ? (fd.margeSousTraitanceSeule/(fd.ssTraitanceJoursReel*fd.tjmVendu)*100) : 0;
+
     const soustraitanceViewHtml = `
       <div class="import-hint" style="margin-top:0;">Zoom sur ce qui est réalisé par des externes uniquement.</div>
       <div class="fin-cards">
+        <div class="fin-card">
+          <div class="fin-card-label">Sous-traitance (Jours brut)</div>
+          <div class="fin-card-value mono">${fd.ssTraitanceJoursBrut.toFixed(2)} j</div>
+          <div class="calc-hint">Jours réels × coefficient, externes uniquement</div>
+        </div>
         <div class="fin-card">
           <div class="fin-card-label">Sous-traitance (jours réels)</div>
           <div class="fin-card-value mono">${fd.ssTraitanceJoursReel.toFixed(2)} j</div>
@@ -1389,14 +1445,24 @@ function renderFinanceTab(p){
           <div class="fin-card-value mono">${formatEURRound(fd.ssTraitanceCumulee)}</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Part de la sous-traitance</div>
+          <div class="fin-card-label">Part de la sous-traitance (brut)</div>
+          <div class="fin-card-value mono">${partSousTraitanceBrut.toFixed(0)}%</div>
+          <div class="calc-hint">Jours sous-traités bruts ÷ Jours consommés bruts</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Part de la sous-traitance (réel)</div>
           <div class="fin-card-value mono">${fd.partSousTraitanceJoursPct.toFixed(0)}%</div>
-          <div class="calc-hint">Jours sous-traités ÷ Jours consommés réels</div>
+          <div class="calc-hint">Jours sous-traités réels ÷ Jours consommés réels</div>
         </div>
         <div class="fin-card">
           <div class="fin-card-label">Marge Cogitime (sous-traitance seule)</div>
           <div class="fin-card-value mono" style="color:${fd.margeSousTraitanceSeule>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEURRound(fd.margeSousTraitanceSeule)}</div>
           <div class="calc-hint">Uniquement les externes : (jours × TJM vendu) − (jours × TJM coût)</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">% Marge (ss traitance seule)</div>
+          <div class="fin-card-value mono">${margePctSousTraitance.toFixed(0)}% ${renderOkBadge(margePctSousTraitance>=40)}</div>
+          <div class="calc-hint">Marge sous-traitance ÷ (Jours réels × TJM vendu) — Ok si ≥ 40%</div>
         </div>
       </div>
     `;
@@ -1493,8 +1559,6 @@ function renderFinanceTab(p){
         ${state.periodMode==='plage' ? `<input type="month" id="f-period-from" value="${state.periodFrom}" style="width:auto;"><span style="color:var(--text-secondary);">→</span><input type="month" id="f-period-to" value="${state.periodTo}" style="width:auto;">` : ''}
       </div>
   `;
-
-  const breakdown = computeRangeBreakdown(p, rangeFrom, rangeTo);
 
   const rowsHtml = breakdown.rows.map(r=>`
     <tr>
@@ -1764,19 +1828,27 @@ function renderGlobalMonthlyBody(){
           <div class="fin-card-value mono">${externalJours.toFixed(2)} j</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Marge ${periodLabel}</div>
-          <div class="fin-card-value mono" style="color:${margeGlobale>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(margeGlobale)}</div>
+          <div class="fin-card-label">% sous-traité</div>
+          <div class="fin-card-value mono">${(totalJours ? externalJours/totalJours*100 : 0).toFixed(0)}%</div>
         </div>
       </div>
 
       <div class="fin-cards">
         <div class="fin-card">
+          <div class="fin-card-label">Total à facturer aux clients</div>
+          <div class="fin-card-value mono">${formatEUR(totalAFacturer)}</div>
+        </div>
+        <div class="fin-card">
           <div class="fin-card-label">Total à payer aux collaborateurs</div>
           <div class="fin-card-value mono">${formatEUR(totalAPayer)}</div>
         </div>
         <div class="fin-card">
-          <div class="fin-card-label">Total à facturer aux clients</div>
-          <div class="fin-card-value mono">${formatEUR(totalAFacturer)}</div>
+          <div class="fin-card-label">Marge ${periodLabel}</div>
+          <div class="fin-card-value mono" style="color:${margeGlobale>=0?'var(--accent-teal)':'var(--accent-coral)'}">${formatEUR(margeGlobale)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">% Marge ${periodLabel}</div>
+          <div class="fin-card-value mono" style="color:${margeGlobale>=0?'var(--accent-teal)':'var(--accent-coral)'}">${(totalAFacturer ? margeGlobale/totalAFacturer*100 : 0).toFixed(0)}%</div>
         </div>
       </div>
 
@@ -2352,6 +2424,12 @@ function attachSidebarEvents(){
   const importGlobalBtn = document.getElementById('btn-import-global');
   if(importGlobalBtn) importGlobalBtn.addEventListener('click', ()=>{
     modal = {type:'importGlobal', data:null};
+    render();
+  });
+
+  const importRelayBtn = document.getElementById('btn-import-relay');
+  if(importRelayBtn) importRelayBtn.addEventListener('click', ()=>{
+    modal = {type:'odooRelay', data:null};
     render();
   });
 
@@ -3288,6 +3366,80 @@ function renderModal(){
       closeModal();
       render();
     };
+  }
+
+  if(modal.type === 'odooRelay'){
+    overlay.innerHTML = `
+      <div class="modal" style="width:520px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Import direct depuis Odoo</h3>
+        <div class="import-hint" style="margin-top:0;">Récupère les heures directement depuis votre base Odoo, via le petit relais que vous avez déployé (Cloudflare Worker) — sans fichier Excel à télécharger/uploader.</div>
+        <label>Adresse du relais</label>
+        <input type="text" id="f-relay-url" value="${state.odooRelayUrl||''}" placeholder="https://pilotage-odoo-relais.votre-pseudo.workers.dev">
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-save">Importer maintenant</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-save').onclick = async ()=>{
+      const relayUrl = document.getElementById('f-relay-url').value.trim().replace(/\/$/, '');
+      if(!relayUrl){ showAlert('Renseignez l\u2019adresse de votre relais.'); return; }
+      state.odooRelayUrl = relayUrl;
+      await saveData();
+      closeModal();
+      modal = {type:'odooRelayLoading', data:null};
+      render();
+      try{
+        const resp = await fetch(relayUrl);
+        const json = await resp.json();
+        if(!resp.ok || json.error){
+          modal = null;
+          render();
+          showAlert('Le relais a renvoyé une erreur : ' + (json.error || resp.status));
+          return;
+        }
+        if(!Array.isArray(json)){
+          modal = null;
+          render();
+          showAlert('Réponse inattendue du relais (pas une liste de lignes).');
+          return;
+        }
+        const rows = json.map(normalizeOdooRow);
+        recordKnownOdooProjectNames(rows);
+        mergeImportedRows(rows);
+        await saveImportHistory();
+        const projectNames = Array.from(new Set(rows.map(r=>(r['Projet']||'').toString().trim()).filter(Boolean)));
+        const unmatchedNames = projectNames.filter(name=>!projectNameAlreadyMatched(name));
+        if(unmatchedNames.length){
+          const items = unmatchedNames.map(name=>({label:name, names:[name], checked:true, keyword:null}));
+          modal = {type:'importGlobalReview', data:{rows, items}};
+        } else {
+          const report = importGlobalRows(rows);
+          const unmatched = computeUnmatchedCount(rows);
+          await saveData();
+          modal = {type:'importGlobalResult', data:{report, unmatched}};
+        }
+        render();
+      }catch(err){
+        console.error(err);
+        modal = null;
+        render();
+        showAlert('Impossible de contacter le relais : ' + err.message);
+      }
+    };
+  }
+
+  if(modal.type === 'odooRelayLoading'){
+    overlay.innerHTML = `
+      <div class="modal" style="width:380px;text-align:center;">
+        <p style="color:var(--text-secondary);">Récupération des heures depuis Odoo<span class="loading-dots"></span></p>
+      </div>
+    `;
+    document.body.appendChild(overlay);
   }
 
   if(modal.type === 'importGlobal'){
