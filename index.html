@@ -1938,7 +1938,7 @@ function renderGlobalLinesBody(){
   const totalJours = totalHeures/7;
 
   const monthOptions = `<option value="all">Tous les mois</option>` + months.map(m=>`<option value="${m}" ${state.linesFilterMonth===m?'selected':''}>${m}</option>`).join('');
-  const projectOptions = `<option value="all">Tous les projets</option>` + state.projects.map(p=>`<option value="${p.id}" ${state.linesFilterProject===p.id?'selected':''}>${p.client}</option>`).join('');
+  const projectOptions = `<option value="all">Tous les projets</option>` + [...state.projects].sort((a,b)=>a.client.localeCompare(b.client, 'fr')).map(p=>`<option value="${p.id}" ${state.linesFilterProject===p.id?'selected':''}>${p.client}</option>`).join('');
   const freelancerOptions = `<option value="all">Tous les collaborateurs</option>` + freelancerNames.map(n=>`<option value="${n}" ${state.linesFilterFreelancer===n?'selected':''}>${n}</option>`).join('');
 
   const groupLabels = {none:'Aucun', project:'Projet', freelancer:'Collaborateur', month:'Mois'};
