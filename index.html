@@ -2715,10 +2715,18 @@ function rowMatchesKeyword(row, keyword){
   return text.includes(kw);
 }
 
+function normalizeProjectNameForMatch(name){
+  return (name||'').toString().replace(/\*/g,'').trim().toLowerCase();
+}
+
 function filterIgnoredRows(rows){
-  const ignored = new Set((state.ignoredOdooProjectNames||[]).map(n=>n.trim().toLowerCase()));
-  if(!ignored.size) return rows;
-  return rows.filter(r => !ignored.has((r['Projet']||'').toString().trim().toLowerCase()));
+  const ignored = (state.ignoredOdooProjectNames||[]).map(normalizeProjectNameForMatch).filter(Boolean);
+  if(!ignored.length) return rows;
+  return rows.filter(r=>{
+    const rowName = normalizeProjectNameForMatch(r['Projet']);
+    if(!rowName) return true;
+    return !ignored.some(ig => rowName.includes(ig) || ig.includes(rowName));
+  });
 }
 
 function normalizeOdooRow(row){
@@ -3388,20 +3396,26 @@ function renderModal(){
   }
 
   if(modal.type === 'ignoredProjects'){
-    const allNames = (state.knownOdooProjectNames||[]).slice().sort();
-    const ignoredSet = new Set((state.ignoredOdooProjectNames||[]).map(n=>n.toLowerCase()));
+    const ignoredList = state.ignoredOdooProjectNames||[];
+    const allNamesSet = new Set([...(state.knownOdooProjectNames||[]), ...ignoredList]);
+    const allNames = Array.from(allNamesSet).sort();
+    const ignoredSet = new Set(ignoredList.map(n=>n.toLowerCase()));
     const rowsHtml = allNames.map(name=>`
       <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
         <input type="checkbox" class="f-ignored-checkbox" value="${encodeURIComponent(name)}" ${ignoredSet.has(name.toLowerCase())?'checked':''}>
         <span>${name}</span>
       </label>
-    `).join('') || `<div style="color:var(--text-secondary);font-size:13px;">Aucun nom de projet Odoo connu pour l'instant — importez d'abord une fois.</div>`;
+    `).join('') || `<div style="color:var(--text-secondary);font-size:13px;">Aucun nom de projet Odoo connu pour l'instant.</div>`;
 
     overlay.innerHTML = `
       <div class="modal" style="width:520px;max-height:80vh;overflow-y:auto;">
         <span class="close-x" id="modal-close">&times;</span>
         <h3>Projets Odoo à ignorer</h3>
         <div class="import-hint" style="margin-top:0;">Les projets cochés ci-dessous seront systématiquement exclus de tous les imports futurs (fichier, import global, et import direct via le relais) — leurs heures ne seront jamais traitées ni comptabilisées. Utile pour des projets internes/admin qui n'ont rien à faire dans le pilotage.</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <input type="text" id="f-ignored-new-name" placeholder="Nom exact du projet dans Odoo (même s'il n'a jamais été importé)" style="flex:1;">
+          <button class="btn btn-small" id="btn-add-ignored-name">Ajouter</button>
+        </div>
         <div id="ignored-list">${rowsHtml}</div>
         <div class="modal-actions">
           <button class="btn" id="modal-cancel">Annuler</button>
@@ -3412,6 +3426,17 @@ function renderModal(){
     document.body.appendChild(overlay);
     document.getElementById('modal-close').onclick = closeModal;
     document.getElementById('modal-cancel').onclick = closeModal;
+
+    document.getElementById('btn-add-ignored-name').addEventListener('click', ()=>{
+      const input = document.getElementById('f-ignored-new-name');
+      const name = input.value.trim();
+      if(!name) return;
+      if(!state.ignoredOdooProjectNames.some(n=>n.toLowerCase()===name.toLowerCase())){
+        state.ignoredOdooProjectNames = [...state.ignoredOdooProjectNames, name];
+      }
+      render();
+    });
+
     document.getElementById('modal-save').onclick = async ()=>{
       const checked = Array.from(document.querySelectorAll('.f-ignored-checkbox:checked')).map(cb=>decodeURIComponent(cb.value));
       state.ignoredOdooProjectNames = checked;
