@@ -598,6 +598,7 @@ let state = {
   freelancers: [],
   knownOdooProjectNames: [],
   odooRelayUrl: '',
+  ignoredOdooProjectNames: [],
   allImportedRows: [],
   selectedId: null,
   loaded: false,
@@ -640,6 +641,7 @@ async function loadData(){
       state.freelancers = parsed.freelancers || [];
       state.knownOdooProjectNames = parsed.knownOdooProjectNames || [];
       state.odooRelayUrl = parsed.odooRelayUrl || '';
+      state.ignoredOdooProjectNames = parsed.ignoredOdooProjectNames || [];
       migrateLoadedData();
       const derivedNames = new Set(state.knownOdooProjectNames || []);
       state.projects.forEach(p=>{
@@ -677,7 +679,8 @@ async function saveData(){
       projects: state.projects,
       freelancers: state.freelancers,
       knownOdooProjectNames: state.knownOdooProjectNames,
-      odooRelayUrl: state.odooRelayUrl
+      odooRelayUrl: state.odooRelayUrl,
+      ignoredOdooProjectNames: state.ignoredOdooProjectNames
     }), false);
   }catch(e){
     console.error('Erreur de sauvegarde', e);
@@ -813,7 +816,8 @@ function exportAllData(){
     freelancers: state.freelancers,
     knownOdooProjectNames: state.knownOdooProjectNames,
     allImportedRows: state.allImportedRows,
-    odooRelayUrl: state.odooRelayUrl
+    odooRelayUrl: state.odooRelayUrl,
+    ignoredOdooProjectNames: state.ignoredOdooProjectNames
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -839,6 +843,7 @@ async function importAllDataFromFile(file){
     state.knownOdooProjectNames = payload.knownOdooProjectNames || [];
     state.allImportedRows = payload.allImportedRows || [];
     state.odooRelayUrl = payload.odooRelayUrl || state.odooRelayUrl || '';
+    state.ignoredOdooProjectNames = payload.ignoredOdooProjectNames || [];
     migrateLoadedData();
     await saveData();
     await saveImportHistory();
@@ -899,6 +904,7 @@ function renderSidebar(){
         <div class="sidebar-title">Projets</div>
         <button class="btn btn-small" id="btn-import-global">Importer Odoo</button>
         <button class="btn btn-small btn-ghost" id="btn-import-relay" title="Importer directement depuis Odoo, sans fichier Excel">⚡ Direct</button>
+        <button class="btn btn-small btn-ghost" id="btn-ignored-projects" title="Exclure certains projets Odoo de tous les imports futurs">🚫 Ignorés</button>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px;">
         <button class="btn btn-small btn-ghost" id="btn-export-backup" style="flex:1;">⬇️ Exporter</button>
@@ -2433,6 +2439,12 @@ function attachSidebarEvents(){
     render();
   });
 
+  const ignoredProjectsBtn = document.getElementById('btn-ignored-projects');
+  if(ignoredProjectsBtn) ignoredProjectsBtn.addEventListener('click', ()=>{
+    modal = {type:'ignoredProjects', data:null};
+    render();
+  });
+
   const exportBtn = document.getElementById('btn-export-backup');
   if(exportBtn) exportBtn.addEventListener('click', ()=>{
     exportAllData();
@@ -2701,6 +2713,12 @@ function rowMatchesKeyword(row, keyword){
   if(!kw) return true;
   const text = ((row['Tâche']||'') + ' ' + (row["Ticket d'assistance"]||'') + ' ' + (row['Description']||'')).toString().toLowerCase();
   return text.includes(kw);
+}
+
+function filterIgnoredRows(rows){
+  const ignored = new Set((state.ignoredOdooProjectNames||[]).map(n=>n.trim().toLowerCase()));
+  if(!ignored.size) return rows;
+  return rows.filter(r => !ignored.has((r['Projet']||'').toString().trim().toLowerCase()));
 }
 
 function normalizeOdooRow(row){
@@ -3254,6 +3272,7 @@ function renderModal(){
         const sheetName = workbook.SheetNames[0];
         let rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
         rows = rows.map(normalizeOdooRow);
+        rows = filterIgnoredRows(rows);
         recordKnownOdooProjectNames(rows);
         mergeImportedRows(rows);
         await saveImportHistory();
@@ -3368,6 +3387,40 @@ function renderModal(){
     };
   }
 
+  if(modal.type === 'ignoredProjects'){
+    const allNames = (state.knownOdooProjectNames||[]).slice().sort();
+    const ignoredSet = new Set((state.ignoredOdooProjectNames||[]).map(n=>n.toLowerCase()));
+    const rowsHtml = allNames.map(name=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+        <input type="checkbox" class="f-ignored-checkbox" value="${encodeURIComponent(name)}" ${ignoredSet.has(name.toLowerCase())?'checked':''}>
+        <span>${name}</span>
+      </label>
+    `).join('') || `<div style="color:var(--text-secondary);font-size:13px;">Aucun nom de projet Odoo connu pour l'instant — importez d'abord une fois.</div>`;
+
+    overlay.innerHTML = `
+      <div class="modal" style="width:520px;max-height:80vh;overflow-y:auto;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Projets Odoo à ignorer</h3>
+        <div class="import-hint" style="margin-top:0;">Les projets cochés ci-dessous seront systématiquement exclus de tous les imports futurs (fichier, import global, et import direct via le relais) — leurs heures ne seront jamais traitées ni comptabilisées. Utile pour des projets internes/admin qui n'ont rien à faire dans le pilotage.</div>
+        <div id="ignored-list">${rowsHtml}</div>
+        <div class="modal-actions">
+          <button class="btn" id="modal-cancel">Annuler</button>
+          <button class="btn btn-primary" id="modal-save">Enregistrer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-save').onclick = async ()=>{
+      const checked = Array.from(document.querySelectorAll('.f-ignored-checkbox:checked')).map(cb=>decodeURIComponent(cb.value));
+      state.ignoredOdooProjectNames = checked;
+      await saveData();
+      closeModal();
+      render();
+    };
+  }
+
   if(modal.type === 'odooRelay'){
     overlay.innerHTML = `
       <div class="modal" style="width:520px;">
@@ -3408,7 +3461,8 @@ function renderModal(){
           showAlert('Réponse inattendue du relais (pas une liste de lignes).');
           return;
         }
-        const rows = json.map(normalizeOdooRow);
+        let rows = json.map(normalizeOdooRow);
+        rows = filterIgnoredRows(rows);
         recordKnownOdooProjectNames(rows);
         mergeImportedRows(rows);
         await saveImportHistory();
@@ -3469,6 +3523,7 @@ function renderModal(){
         const sheetName = workbook.SheetNames[0];
         let rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval:''});
         rows = rows.map(normalizeOdooRow);
+        rows = filterIgnoredRows(rows);
         recordKnownOdooProjectNames(rows);
         mergeImportedRows(rows);
         await saveImportHistory();
