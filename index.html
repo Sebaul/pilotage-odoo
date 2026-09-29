@@ -2765,10 +2765,28 @@ function getOdooFragments(project){
 function projectMatchesRow(project, row){
   const projet = (row['Projet']||'').toString().trim().toLowerCase();
   const fragments = getOdooFragments(project);
-  if(!fragments.length || !fragments.some(f=> projet.includes(f))) return false;
+  const matchingFragment = fragments.filter(f=> projet.includes(f)).sort((a,b)=>b.length-a.length)[0];
+  if(!matchingFragment) return false;
+
   if(project.odooTaskKeyword){
     return rowMatchesKeyword(row, project.odooTaskKeyword);
   }
+
+  // Si un AUTRE projet a une correspondance plus longue (donc plus précise) sur cette même ligne,
+  // c'est lui qui doit la récupérer, pas celui-ci (ex: "FRO - Labo R&D" vs "FRO - Labo R&D Assistance").
+  const others = state.projects.filter(p2=> p2.id!==project.id);
+  for(const other of others){
+    const otherFragments = getOdooFragments(other);
+    const otherMatch = otherFragments.filter(f=> projet.includes(f)).sort((a,b)=>b.length-a.length)[0];
+    if(otherMatch && otherMatch.length > matchingFragment.length){
+      if(other.odooTaskKeyword){
+        if(rowMatchesKeyword(row, other.odooTaskKeyword)) return false;
+      } else {
+        return false;
+      }
+    }
+  }
+
   const siblingsWithKeyword = state.projects.filter(p2=> p2.id!==project.id && p2.odooTaskKeyword);
   for(const sib of siblingsWithKeyword){
     const sibFragments = getOdooFragments(sib);
