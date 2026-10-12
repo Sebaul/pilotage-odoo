@@ -582,7 +582,7 @@ let state = {
   forfaitViewTab: 'client',
   periodFrom: null,
   periodTo: null,
-  viewMode: 'project',
+  viewMode: 'globalFinance',
   sidebarSearch: '',
   sidebarVisibleCount: 15,
   globalFinanceMonth: null,
@@ -1895,9 +1895,7 @@ function renderFreelancersBar(){
 function pickGlobalDefaultMonth(){
   const allMonths = new Set();
   state.projects.forEach(p=> (p.timeEntries||[]).forEach(e=> allMonths.add(e.month)));
-  if(allMonths.has(CURRENT_MONTH)) return CURRENT_MONTH;
-  const prev = shiftMonth(CURRENT_MONTH, -1);
-  if(allMonths.has(prev)) return prev;
+  // Mois le plus récent contenant des saisies
   const sorted = Array.from(allMonths).sort();
   return sorted.length ? sorted[sorted.length-1] : CURRENT_MONTH;
 }
