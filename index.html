@@ -1,9 +1,4 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pilotage Odoo — Cogitime</title>
+<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pilotage Odoo — Cogitime</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
@@ -561,33 +556,12 @@ html, body{margin:0;padding:0;background:var(--bg);min-height:100vh;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const STAGES = ['Cadrage','Configuration','Développement','Tests','Recette','Go-live'];
-// --- Adaptateur de stockage local (remplace window.storage de Claude) ---
-if(!window.storage){
-  window.storage = {
-    async get(key){
-      try{
-        const raw = localStorage.getItem(key);
-        if(raw === null || raw === undefined) return null;
-        return {key, value: raw, shared:false};
-      }catch(e){ console.error('storage.get error', e); return null; }
-    },
-    async set(key, value){
-      try{ localStorage.setItem(key, value); return {key, value, shared:false}; }
-      catch(e){ console.error('storage.set error', e); return null; }
-    },
-    async delete(key){
-      try{ localStorage.removeItem(key); return {key, deleted:true, shared:false}; }
-      catch(e){ console.error('storage.delete error', e); return null; }
-    },
-    async list(prefix){
-      try{
-        const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
-        return {keys, prefix, shared:false};
-      }catch(e){ console.error('storage.list error', e); return null; }
-    }
-  };
-}
-
+if(!window.storage){ window.storage = {
+  async get(key){ try{ const v = localStorage.getItem(key); return v===null ? null : {key, value:v}; }catch(e){ return null; } },
+  async set(key,value){ try{ localStorage.setItem(key,value); return {key,value}; }catch(e){ return null; } },
+  async delete(key){ try{ localStorage.removeItem(key); }catch(e){} return {key,deleted:true}; },
+  async list(prefix){ const keys=[]; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(!prefix||k.startsWith(prefix)) keys.push(k);} }catch(e){} return {keys}; }
+}; }
 const STORAGE_KEY = 'odoo-pilotage-data';
 const HISTORY_STORAGE_KEY = 'odoo-pilotage-import-history';
 const TODAY = '2026-07-10';
@@ -632,6 +606,217 @@ function seedData(){
   };
 }
 
+
+// ===== Synchronisation multi-navigateurs (Cloudflare KV via le Worker) =====
+const SYNC_CFG_KEY = 'odoo-pilotage-sync-config';
+const SYNC_META_KEY = 'odoo-pilotage-sync-meta';
+const sync = {
+  url:'', password:'', enabled:false,
+  status:'off', // off | ok | pending | offline | conflict | error
+  versions:{data:0, history:0},
+  dirty:{data:false, history:false},
+  conflict:null, // {key, serverVersion}
+  timer:null, busy:false, lastError:''
+};
+
+function syncLsGet(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } }
+function syncLsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function syncLoadConfig(){
+  const cfg = syncLsGet(SYNC_CFG_KEY);
+  if(cfg && cfg.url && cfg.password){ sync.url = cfg.url; sync.password = cfg.password; sync.enabled = true; }
+  const meta = syncLsGet(SYNC_META_KEY);
+  if(meta){
+    sync.versions = meta.versions || sync.versions;
+    sync.dirty = meta.dirty || sync.dirty;
+  }
+  sync.status = sync.enabled ? 'pending' : 'off';
+}
+function syncSaveMeta(){ syncLsSet(SYNC_META_KEY, {versions:sync.versions, dirty:sync.dirty}); }
+function syncSetStatus(st, err){
+  sync.status = st; sync.lastError = err || '';
+  const b = document.getElementById('btn-sync');
+  if(b) b.innerHTML = syncButtonLabel();
+}
+function syncButtonLabel(){
+  return {
+    off:'☁️ Synchro : désactivée',
+    ok:'☁️ Synchronisé',
+    pending:'☁️ Synchro en cours…',
+    offline:'☁️ Hors ligne',
+    conflict:'⚠️ Conflit de synchro',
+    error:'⚠️ Erreur de synchro'
+  }[sync.status] || '☁️ Synchro';
+}
+
+function syncPayload(key){
+  if(key==='history') return state.allImportedRows;
+  return {
+    projects: state.projects,
+    freelancers: state.freelancers,
+    knownOdooProjectNames: state.knownOdooProjectNames,
+    ignoredOdooProjectNames: state.ignoredOdooProjectNames
+  };
+}
+
+async function syncRequest(path, options){
+  const resp = await fetch(sync.url.replace(/\/$/,'') + path, {
+    ...(options||{}),
+    headers: {'Content-Type':'application/json', 'X-Sync-Password': sync.password}
+  });
+  let json = null;
+  try{ json = await resp.json(); }catch(e){}
+  return {status: resp.status, ok: resp.ok, json: json || {}};
+}
+
+async function syncApplyRemote(key, remote){
+  if(key==='history'){
+    state.allImportedRows = Array.isArray(remote.data) ? remote.data : [];
+    await window.storage.set(HISTORY_STORAGE_KEY, JSON.stringify(state.allImportedRows), false);
+  } else {
+    const d = remote.data || {};
+    state.projects = d.projects || [];
+    state.freelancers = d.freelancers || [];
+    state.knownOdooProjectNames = d.knownOdooProjectNames || [];
+    state.ignoredOdooProjectNames = d.ignoredOdooProjectNames || [];
+    migrateLoadedData();
+    await window.storage.set(STORAGE_KEY, JSON.stringify({
+      projects: state.projects, freelancers: state.freelancers,
+      knownOdooProjectNames: state.knownOdooProjectNames,
+      odooRelayUrl: state.odooRelayUrl,
+      ignoredOdooProjectNames: state.ignoredOdooProjectNames
+    }), false);
+    if(!state.projects.some(p=>p.id===state.selectedId)) state.selectedId = state.projects.length ? state.projects[0].id : null;
+  }
+  sync.versions[key] = remote.version;
+  sync.dirty[key] = false;
+  syncSaveMeta();
+}
+
+function syncLocalIsEmpty(key){
+  return key==='history' ? !(state.allImportedRows||[]).length : (!state.projects.length && !state.freelancers.length);
+}
+
+// Tire les versions en ligne. Retourne true si l'écran doit être redessiné.
+async function syncPull(){
+  if(!sync.enabled || sync.busy) return false;
+  sync.busy = true;
+  let changed = false;
+  try{
+    for(const key of ['data','history']){
+      const metaOnly = sync.versions[key] > 0 && !sync.dirty[key];
+      const r = await syncRequest('/sync?key='+key+(metaOnly?'&meta=1':''));
+      if(r.status===401){ syncSetStatus('error','Mot de passe refusé'); return changed; }
+      if(!r.ok){ syncSetStatus('error', r.json.error || ('HTTP '+r.status)); return changed; }
+      const remoteVersion = r.json.version || 0;
+      if(remoteVersion === sync.versions[key] && !(remoteVersion===0 && !syncLocalIsEmpty(key))) continue;
+      if(remoteVersion === 0){
+        // rien en ligne : on enverra la version locale
+        sync.dirty[key] = true; syncSaveMeta(); continue;
+      }
+      if(remoteVersion <= sync.versions[key]) continue;
+      // Une version plus récente existe en ligne
+      const neverSynced = sync.versions[key]===0;
+      if(sync.dirty[key] || (neverSynced && !syncLocalIsEmpty(key))){
+        sync.conflict = {key, serverVersion: remoteVersion};
+        syncSetStatus('conflict');
+        continue;
+      }
+      let remote = r.json;
+      if(metaOnly){
+        const full = await syncRequest('/sync?key='+key);
+        if(!full.ok){ syncSetStatus('error', full.json.error || ('HTTP '+full.status)); return changed; }
+        remote = full.json;
+      }
+      await syncApplyRemote(key, remote);
+      changed = true;
+    }
+    if(!sync.conflict) syncSetStatus(sync.dirty.data||sync.dirty.history ? 'pending':'ok');
+  }catch(e){
+    syncSetStatus('offline', e.message);
+  }finally{
+    sync.busy = false;
+  }
+  return changed;
+}
+
+async function syncPush(){
+  if(!sync.enabled || sync.busy || sync.conflict) return;
+  sync.busy = true;
+  try{
+    for(const key of ['data','history']){
+      if(!sync.dirty[key]) continue;
+      const r = await syncRequest('/sync?key='+key, {method:'PUT', body: JSON.stringify({baseVersion: sync.versions[key], data: syncPayload(key)})});
+      if(r.status===409){ sync.conflict = {key, serverVersion: r.json.version}; syncSetStatus('conflict'); return; }
+      if(r.status===401){ syncSetStatus('error','Mot de passe refusé'); return; }
+      if(!r.ok){ syncSetStatus('error', r.json.error || ('HTTP '+r.status)); return; }
+      sync.versions[key] = r.json.version;
+      sync.dirty[key] = false;
+      syncSaveMeta();
+    }
+    syncSetStatus('ok');
+  }catch(e){
+    syncSetStatus('offline', e.message);
+  }finally{
+    sync.busy = false;
+  }
+}
+
+function syncMarkDirty(key){
+  if(!sync.enabled || !state.loaded) return;
+  sync.dirty[key] = true;
+  syncSaveMeta();
+  if(sync.conflict){ return; }
+  syncSetStatus('pending');
+  clearTimeout(sync.timer);
+  sync.timer = setTimeout(()=>{ if(sync.busy){ syncMarkRetry(); } else syncPush(); }, 3000);
+}
+function syncMarkRetry(){ clearTimeout(sync.timer); sync.timer = setTimeout(syncPush, 1500); }
+
+async function syncStart(){
+  if(!sync.enabled) return;
+  const changed = await syncPull();
+  if(sync.conflict){ openSyncConflictModal(); return; }
+  if(changed) render();
+  if(sync.dirty.data || sync.dirty.history) await syncPush();
+}
+
+function openSyncConflictModal(){
+  if(modal && modal.type==='syncConflict') return;
+  modal = {type:'syncConflict', data:null};
+  render();
+}
+
+async function syncResolveConflict(useRemote){
+  const c = sync.conflict;
+  if(!c) return;
+  sync.conflict = null;
+  try{
+    if(useRemote){
+      const r = await syncRequest('/sync?key='+c.key);
+      if(!r.ok) throw new Error(r.json.error || ('HTTP '+r.status));
+      await syncApplyRemote(c.key, r.json);
+    } else {
+      sync.versions[c.key] = c.serverVersion;
+      sync.dirty[c.key] = true;
+      syncSaveMeta();
+    }
+    closeModal();
+    await syncStart();
+    render();
+  }catch(e){
+    sync.conflict = c;
+    syncSetStatus('offline', e.message);
+    showAlert('Résolution impossible : ' + e.message);
+  }
+}
+
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState!=='visible' || !sync.enabled) return;
+  if(modal || sync.dirty.data || sync.dirty.history || sync.conflict) return;
+  syncPull().then(changed=>{ if(sync.conflict) openSyncConflictModal(); else if(changed) render(); });
+});
+syncLoadConfig();
+
 async function loadData(){
   try{
     const res = await window.storage.get(STORAGE_KEY, false);
@@ -671,6 +856,7 @@ async function loadData(){
   }
 
   render();
+  syncStart();
 }
 
 async function saveData(){
@@ -682,6 +868,7 @@ async function saveData(){
       odooRelayUrl: state.odooRelayUrl,
       ignoredOdooProjectNames: state.ignoredOdooProjectNames
     }), false);
+    syncMarkDirty('data');
   }catch(e){
     console.error('Erreur de sauvegarde', e);
   }
@@ -702,6 +889,7 @@ function mergeImportedRows(rows){
 async function saveImportHistory(){
   try{
     await window.storage.set(HISTORY_STORAGE_KEY, JSON.stringify(state.allImportedRows), false);
+    syncMarkDirty('history');
   }catch(e){
     console.error('Erreur de sauvegarde de l\u2019historique d\u2019import', e);
   }
@@ -911,6 +1099,7 @@ function renderSidebar(){
         <button class="btn btn-small btn-ghost" id="btn-import-backup" style="flex:1;">⬆️ Importer sauvegarde</button>
         <input type="file" id="f-import-backup-file" accept=".json" style="display:none;">
       </div>
+      <button class="btn btn-small btn-ghost btn-full" id="btn-sync" style="margin-bottom:10px;" title="Synchroniser vos réglages entre navigateurs">${syncButtonLabel()}</button>
       <input type="text" id="f-sidebar-search" value="${state.sidebarSearch||''}" placeholder="Rechercher un projet…" style="margin-bottom:10px;">
       ${cards || '<div style="color:var(--text-secondary);font-size:13px;">Aucun projet</div>'}
       <div style="font-size:11px;color:var(--text-secondary);margin:8px 0;text-align:center;" class="mono">${countLabel}</div>
@@ -2439,6 +2628,12 @@ function attachSidebarEvents(){
     render();
   });
 
+  const syncBtn = document.getElementById('btn-sync');
+  if(syncBtn) syncBtn.addEventListener('click', ()=>{
+    modal = {type: sync.conflict ? 'syncConflict' : 'syncConfig', data:null};
+    render();
+  });
+
   const ignoredProjectsBtn = document.getElementById('btn-ignored-projects');
   if(ignoredProjectsBtn) ignoredProjectsBtn.addEventListener('click', ()=>{
     modal = {type:'ignoredProjects', data:null};
@@ -3472,6 +3667,8 @@ function renderModal(){
         <div class="import-hint" style="margin-top:0;">Récupère les heures directement depuis votre base Odoo, via le petit relais que vous avez déployé (Cloudflare Worker) — sans fichier Excel à télécharger/uploader.</div>
         <label>Adresse du relais</label>
         <input type="text" id="f-relay-url" value="${state.odooRelayUrl||''}" placeholder="https://pilotage-odoo-relais.votre-pseudo.workers.dev">
+        <label>Mot de passe du relais</label>
+        <input type="password" id="f-relay-pass" value="${sync.password||''}" placeholder="Mot de passe (SYNC_PASSWORD)">
         <div class="modal-actions">
           <button class="btn" id="modal-cancel">Annuler</button>
           <button class="btn btn-primary" id="modal-save">Importer maintenant</button>
@@ -3483,14 +3680,17 @@ function renderModal(){
     document.getElementById('modal-cancel').onclick = closeModal;
     document.getElementById('modal-save').onclick = async ()=>{
       const relayUrl = document.getElementById('f-relay-url').value.trim().replace(/\/$/, '');
+      const relayPass = document.getElementById('f-relay-pass').value;
       if(!relayUrl){ showAlert('Renseignez l\u2019adresse de votre relais.'); return; }
+      if(!relayPass){ showAlert('Renseignez le mot de passe du relais.'); return; }
       state.odooRelayUrl = relayUrl;
+      if(!sync.enabled){ sync.password = relayPass; }
       await saveData();
       closeModal();
       modal = {type:'odooRelayLoading', data:null};
       render();
       try{
-        const resp = await fetch(relayUrl);
+        const resp = await fetch(relayUrl, {headers:{'X-Sync-Password': relayPass}});
         const json = await resp.json();
         if(!resp.ok || json.error){
           modal = null;
@@ -3528,6 +3728,74 @@ function renderModal(){
         showAlert('Impossible de contacter le relais : ' + err.message);
       }
     };
+  }
+
+
+  if(modal.type === 'syncConfig'){
+    const statusTxt = syncButtonLabel() + (sync.lastError ? ' — ' + sync.lastError : '');
+    overlay.innerHTML = `
+      <div class="modal" style="width:520px;">
+        <span class="close-x" id="modal-close">&times;</span>
+        <h3>Synchronisation entre navigateurs</h3>
+        <div class="import-hint" style="margin-top:0;">Vos réglages (projets, taux, collaborateurs, projets ignorés) et l’historique des heures sont enregistrés en ligne dans votre relais Cloudflare, protégés par un mot de passe. Renseignez les mêmes informations sur chaque navigateur.</div>
+        <div class="mono" style="font-size:12px;margin:8px 0;">État : ${statusTxt}</div>
+        <label>Adresse du relais</label>
+        <input type="text" id="f-sync-url" value="${sync.url||state.odooRelayUrl||''}" placeholder="https://pilotage-odoo-relais.votre-pseudo.workers.dev">
+        <label>Mot de passe</label>
+        <input type="password" id="f-sync-pass" value="${sync.password||''}" placeholder="SYNC_PASSWORD">
+        <div class="modal-actions">
+          ${sync.enabled ? '<button class="btn" id="sync-disable">Désactiver</button>' : ''}
+          <button class="btn" id="modal-cancel">Fermer</button>
+          <button class="btn btn-primary" id="modal-save">${sync.enabled ? 'Enregistrer et synchroniser' : 'Activer'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    const dis = document.getElementById('sync-disable');
+    if(dis) dis.onclick = ()=>{
+      sync.enabled = false; sync.password = ''; sync.conflict = null; clearTimeout(sync.timer);
+      try{ localStorage.removeItem(SYNC_CFG_KEY); }catch(e){}
+      syncSetStatus('off');
+      closeModal(); render();
+    };
+    document.getElementById('modal-save').onclick = async ()=>{
+      const url = document.getElementById('f-sync-url').value.trim().replace(/\/$/,'');
+      const pass = document.getElementById('f-sync-pass').value;
+      if(!url || !pass){ showAlert('Renseignez l’adresse et le mot de passe.'); return; }
+      if(!sync.enabled || sync.url!==url || sync.password!==pass){
+        sync.url = url; sync.password = pass; sync.enabled = true; sync.conflict = null;
+        syncLsSet(SYNC_CFG_KEY, {url, password: pass});
+      }
+      closeModal();
+      syncSetStatus('pending');
+      await syncStart();
+      render();
+      if(sync.status==='error' || sync.status==='offline'){
+        showAlert('Synchronisation impossible : ' + (sync.lastError || 'erreur inconnue'));
+      }
+    };
+  }
+
+  if(modal.type === 'syncConflict'){
+    const c = sync.conflict;
+    overlay.innerHTML = `
+      <div class="modal" style="width:540px;">
+        <h3>Conflit de synchronisation</h3>
+        <div class="import-hint" style="margin-top:0;">Une version plus récente de vos ${c && c.key==='history' ? 'données d’import (historique des heures)' : 'réglages'} existe en ligne (modifiée depuis un autre navigateur), alors que ce navigateur contient aussi des modifications locales.</div>
+        <p style="font-size:13px;">Quelle version conserver ? Pensez à utiliser « ⬇️ Exporter » avant si vous hésitez.</p>
+        <div class="modal-actions">
+          <button class="btn" id="sync-later">Décider plus tard</button>
+          <button class="btn" id="sync-use-remote">Charger la version en ligne</button>
+          <button class="btn btn-primary" id="sync-use-local">Écraser la version en ligne</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('sync-later').onclick = closeModal;
+    document.getElementById('sync-use-remote').onclick = ()=> syncResolveConflict(true);
+    document.getElementById('sync-use-local').onclick = ()=> syncResolveConflict(false);
   }
 
   if(modal.type === 'odooRelayLoading'){
