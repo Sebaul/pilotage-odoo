@@ -2209,7 +2209,7 @@ function computeSubcontractorBreakdown(month){
       const type = fl ? fl.type : 'externe';
       if(!result[e.freelancer]) result[e.freelancer] = {name:e.freelancer, type, tjmCout: fl?(fl.tjmCout||0):0, projects:{}};
       const r = result[e.freelancer];
-      if(!r.projects[p.id]) r.projects[p.id] = {client:p.client, ref:p.ref, tjmVendu: p.billingType==='maintenance' ? 0 : getEffectiveTjmVendu(p), heures:0, joursFacturables:0};
+      if(!r.projects[p.id]) r.projects[p.id] = {client:p.client, ref:p.ref, tjmVendu: p.billingType==='maintenance' ? 0 : getEffectiveTjmVendu(p), isInterne: p.billingType==='interne', heures:0, joursFacturables:0};
       r.projects[p.id].heures += e.heures;
       const coef = getEffectiveCoefficient(p, e.freelancer, e.month);
       r.projects[p.id].joursFacturables += (e.heures/7) * coef;
@@ -2248,8 +2248,8 @@ function renderGlobalSubcontractorsBody(){
         <td class="mono">${pr.jours.toFixed(2)}</td>
         <td class="mono">${formatEUR(pr.montantSousTraitant)}</td>
         <td class="mono">${pr.tjmVendu ? formatEUR(pr.tjmVendu) : '—'}</td>
-        <td class="mono">${pr.tjmVendu ? formatEUR(pr.montantFacture) : '—'}</td>
-        <td class="mono">${pr.tjmVendu ? formatEUR(pr.marge) : '—'}</td>
+        <td class="mono">${(pr.tjmVendu || pr.isInterne) ? formatEUR(pr.montantFacture) : '—'}</td>
+        <td class="mono" ${pr.isInterne ? 'style="color:var(--accent-coral);"' : ''}>${(pr.tjmVendu || pr.isInterne) ? formatEUR(pr.marge) : '—'}</td>
         <td class="mono">${pr.tjmVendu && pr.montantFacture ? `(${(pr.marge/pr.montantFacture*100).toFixed(0)}%)` : '—'}</td>
       </tr>`).join('');
 
