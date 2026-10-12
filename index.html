@@ -564,8 +564,8 @@ if(!window.storage){ window.storage = {
 }; }
 const STORAGE_KEY = 'odoo-pilotage-data';
 const HISTORY_STORAGE_KEY = 'odoo-pilotage-import-history';
-const TODAY = '2026-07-10';
-const CURRENT_MONTH = '2026-07';
+const TODAY = (()=>{ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+const CURRENT_MONTH = TODAY.slice(0,7);
 
 let state = {
   projects: [],
