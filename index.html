@@ -935,7 +935,6 @@ function render(){
   const kpiTotal = state.projects.length;
   const kpiBloque = state.projects.filter(p=>p.health==='bloque').length;
   const kpiAttention = state.projects.filter(p=>p.health==='attention').length;
-  const kpiUrgent = state.projects.filter(p=>daysUntil(p.deadline) <= 7).length;
 
   app.innerHTML = `
     <div class="kpi-bar">
@@ -943,7 +942,6 @@ function render(){
       <div class="kpi"><div class="kpi-label">Projets actifs</div><div class="kpi-value">${kpiTotal}</div></div>
       <div class="kpi"><div class="kpi-label">Bloqués</div><div class="kpi-value coral">${kpiBloque}</div></div>
       <div class="kpi"><div class="kpi-label">À surveiller</div><div class="kpi-value amber">${kpiAttention}</div></div>
-      <div class="kpi"><div class="kpi-label">Échéance &lt; 7j</div><div class="kpi-value teal">${kpiUrgent}</div></div>
     </div>
     <div class="main-layout">
       ${renderSidebar()}
@@ -1369,8 +1367,6 @@ function renderMainPanel(){
     return `<div class="main-panel"><div class="empty-state">Sélectionnez un projet à gauche, ou créez-en un nouveau.</div></div>`;
   }
 
-  const dleft = daysUntil(p.deadline);
-  const dtext = dleft < 0 ? `dépassée de ${Math.abs(dleft)}j` : `dans ${dleft}j`;
 
   const body = state.activeTab === 'finance' ? renderFinanceTab(p) : renderPilotageBody(p);
 
@@ -1379,7 +1375,7 @@ function renderMainPanel(){
       <div class="panel-header">
         <div>
           <div class="panel-title">${p.client}</div>
-          <div class="panel-sub mono">${p.ref} · échéance ${p.deadline} (${dtext})</div>
+          <div class="panel-sub mono">${p.ref}</div>
         </div>
         <div class="panel-actions">
           <button class="btn btn-small" id="btn-edit-project">Modifier</button>
@@ -2221,12 +2217,17 @@ function computeSubcontractorBreakdown(month){
       const montantSousTraitant = jours * r.tjmCout;
       const montantFacture = pr.tjmVendu ? joursFacturables * pr.tjmVendu : 0;
       const marge = montantFacture - montantSousTraitant;
-      return {...pr, jours, joursFacturables, coef, montantSousTraitant, montantFacture, marge};
+      const hasMargin = !!(pr.tjmVendu || pr.isInterne);
+      return {...pr, jours, joursFacturables, coef, montantSousTraitant, montantFacture, marge, hasMargin};
     }).sort((a,b)=> b.heures-a.heures);
     const totalHeures = projectsList.reduce((s,x)=>s+x.heures,0);
     const totalMontant = projectsList.reduce((s,x)=>s+x.montantSousTraitant,0);
     const totalFacture = projectsList.reduce((s,x)=>s+x.montantFacture,0);
-    return {name:r.name, type:r.type, tjmCout:r.tjmCout, projectsList, totalHeures, totalMontant, totalFacture, totalMarge: totalFacture-totalMontant};
+    // La marge totale = somme des marges affichées (projets avec TJM vendu ou internes)
+    const totalMarge = projectsList.reduce((s,x)=> s + (x.hasMargin ? x.marge : 0), 0);
+    const coutSansMarge = projectsList.reduce((s,x)=> s + (x.hasMargin ? 0 : x.montantSousTraitant), 0);
+    const nbSansMarge = projectsList.filter(x=>!x.hasMargin).length;
+    return {name:r.name, type:r.type, tjmCout:r.tjmCout, projectsList, totalHeures, totalMontant, totalFacture, totalMarge, coutSansMarge, nbSansMarge};
   }).sort((a,b)=> b.totalMontant-a.totalMontant);
 }
 
@@ -2276,6 +2277,7 @@ function renderGlobalSubcontractorsBody(){
             <td class="mono">${r.totalFacture ? `(${(r.totalMarge/r.totalFacture*100).toFixed(0)}%)` : '—'}</td>
           </tr></tfoot>
         </table>
+        ${r.nbSansMarge ? `<div class="import-hint" style="margin-top:8px;">La marge totale additionne les marges affichées ci-dessus. ${r.nbSansMarge} projet${r.nbSansMarge>1?'s':''} sans TJM vendu (forfait mensuel, maintenance ou TJM non renseigné) ${r.nbSansMarge>1?'sont':'est'} exclu${r.nbSansMarge>1?'s':''} de cette marge : ${formatEUR(r.coutSansMarge)} de coût.</div>` : ''}
       </div>`;
   }).join('');
 
@@ -3066,7 +3068,6 @@ function createProjectFromOdooName(odooName, clientLabelOverride){
   const newP = {
     id: uid(), client: cleaned, ref: 'ODO-'+Math.floor(Math.random()*900+100),
     stage:0, health:'ok', freelancers:[],
-    deadline: defaultDeadlinePlus(30),
     lastUpdate: new Date().toISOString().slice(0,10),
     notes:'',
     tjmVendu:0, vendu:0, pctProdRisque:0, factureCumulee:0,
@@ -3198,8 +3199,6 @@ function renderModal(){
         <input type="text" id="f-client" value="${p ? p.client : ''}" placeholder="Nom du client">
         <label>Référence</label>
         <input type="text" id="f-ref" value="${p ? p.ref : ''}" placeholder="ODO-0XX">
-        <label>Échéance</label>
-        <input type="date" id="f-deadline" value="${p ? p.deadline : ''}">
         <label>Indépendants assignés (séparés par des virgules)</label>
         <input type="text" id="f-freelancers" value="${p ? p.freelancers.join(', ') : ''}" placeholder="Sami K., Léa M.">
         <label>Lien Drive du projet</label>
@@ -3283,7 +3282,6 @@ function renderModal(){
     document.getElementById('modal-save').onclick = async ()=>{
       const client = document.getElementById('f-client').value.trim();
       const ref = document.getElementById('f-ref').value.trim();
-      const deadline = document.getElementById('f-deadline').value;
       const freelancersRaw = document.getElementById('f-freelancers').value;
       const notes = document.getElementById('f-notes').value;
       const tjmVendu = parseFloat(document.getElementById('f-tjmvendu').value.replace(',','.')) || 0;
@@ -3317,7 +3315,7 @@ function renderModal(){
       });
 
       if(p){
-        p.client = client; p.ref = ref; p.deadline = deadline;
+        p.client = client; p.ref = ref;
         p.freelancers = freelancersList; p.notes = notes;
         p.tjmVendu = tjmVendu; p.vendu = vendu; p.pctProdRisque = pctProdRisque; p.factureCumulee = factureCumulee;
         p.odooProjectName = odooProjectName;
@@ -3333,7 +3331,6 @@ function renderModal(){
         const newP = {
           id: uid(), client, ref: ref || ('ODO-'+Math.floor(Math.random()*900+100)),
           stage:0, health:'ok', freelancers:freelancersList,
-          deadline: deadline || new Date().toISOString().slice(0,10),
           lastUpdate: new Date().toISOString().slice(0,10),
           notes,
           tjmVendu, vendu, pctProdRisque, factureCumulee, odooProjectName, odooTaskKeyword, driveLink,
@@ -4093,7 +4090,6 @@ function localFallbackSummary(){
     const fin = computeFinance(p);
     out += `${p.client} (${p.ref})\n`;
     out += `  Étape : ${STAGES[p.stage]} — Statut : ${healthLabel(p.health)}\n`;
-    out += `  Échéance : ${p.deadline}\n`;
     out += `  Indépendants : ${p.freelancers.join(', ') || '—'}\n`;
     out += `  Avancement temps : ${fin.avancementTps.toFixed(0)}% (${fin.totalJours.toFixed(2)}j / ${fin.joursVendus.toFixed(2)}j vendus)\n`;
     out += `  Marge cumulée : ${formatEUR(fin.margeCumulee)}\n`;
